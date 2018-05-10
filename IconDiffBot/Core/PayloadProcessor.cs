@@ -9,10 +9,13 @@ using Microsoft.Extensions.Options;
 using Octokit;
 using System;
 using System.Collections.Generic;
+using System.Drawing;
 using System.Globalization;
 using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
+
+using MemoryStream = System.IO.MemoryStream;
 
 namespace IconDiffBot.Core
 {
@@ -54,6 +57,10 @@ namespace IconDiffBot.Core
 		/// The <see cref="IBackgroundJobClient"/> for the <see cref="PayloadProcessor"/>
 		/// </summary>
 		readonly IBackgroundJobClient backgroundJobClient;
+		/// <summary>
+		/// The <see cref="IDiffGenerator"/> for the <see cref="PayloadProcessor"/>
+		/// </summary>
+		readonly IDiffGenerator diffGenerator;
 
 		/// <summary>
 		/// Construct a <see cref="PayloadProcessor"/>
@@ -64,7 +71,8 @@ namespace IconDiffBot.Core
 		/// <param name="logger">The value of <see cref="logger"/></param>
 		/// <param name="stringLocalizer">The value of <see cref="stringLocalizer"/></param>
 		/// <param name="backgroundJobClient">The value of <see cref="backgroundJobClient"/></param>
-		public PayloadProcessor(IOptions<GitHubConfiguration> gitHubConfigurationOptions, IServiceProvider serviceProvider, IIOManager ioManager, ILogger<PayloadProcessor> logger, IStringLocalizer<PayloadProcessor> stringLocalizer, IBackgroundJobClient backgroundJobClient)
+		/// <param name="diffGenerator">The value of <see cref="diffGenerator"/></param>
+		public PayloadProcessor(IOptions<GitHubConfiguration> gitHubConfigurationOptions, IServiceProvider serviceProvider, IIOManager ioManager, ILogger<PayloadProcessor> logger, IStringLocalizer<PayloadProcessor> stringLocalizer, IBackgroundJobClient backgroundJobClient, IDiffGenerator diffGenerator)
 		{
 			gitHubConfiguration = gitHubConfigurationOptions?.Value ?? throw new ArgumentNullException(nameof(gitHubConfigurationOptions));
 			this.ioManager = new ResolvingIOManager(ioManager ?? throw new ArgumentNullException(nameof(ioManager)), WorkingDirectory);
@@ -72,6 +80,7 @@ namespace IconDiffBot.Core
 			this.logger = logger ?? throw new ArgumentNullException(nameof(logger));
 			this.stringLocalizer = stringLocalizer ?? throw new ArgumentNullException(nameof(stringLocalizer));
 			this.backgroundJobClient = backgroundJobClient ?? throw new ArgumentNullException(nameof(backgroundJobClient));
+			this.diffGenerator = diffGenerator ?? throw new ArgumentNullException(nameof(diffGenerator));
 		}
 
 		/// <summary>
@@ -95,7 +104,7 @@ namespace IconDiffBot.Core
 				logger.LogTrace("Repository is {0}/{1}", pullRequest.Base.Repository.Owner.Login, pullRequest.Base.Repository.Name);
 				logger.LogTrace("Pull Request: \"{0}\" by {1}", pullRequest.Title, pullRequest.User.Login);
 
-				var changedMapsTask = gitHubManager.GetPullRequestChangedFiles(pullRequest, installationId, cancellationToken);
+				var allChangedFilesTask = gitHubManager.GetPullRequestChangedFiles(pullRequest, installationId, cancellationToken);
 				var requestIdentifier = String.Concat(pullRequest.Base.Repository.Owner.Login, pullRequest.Base.Repository.Name, pullRequest.Number);
 
 				var ncr = new NewCheckRun
@@ -117,9 +126,9 @@ namespace IconDiffBot.Core
 
 				try
 				{
-					var allChangedMaps = await changedMapsTask.ConfigureAwait(false);
-					var changedDmms = allChangedMaps.Where(x => x.FileName.EndsWith(".dmi", StringComparison.InvariantCultureIgnoreCase)).Select(x => x.FileName).ToList();
-					if (changedDmms.Count == 0)
+					var allChangedFiles = await allChangedFilesTask.ConfigureAwait(false);
+					var changedDmis = allChangedFiles.Where(x => x.FileName.EndsWith(".dmi", StringComparison.InvariantCultureIgnoreCase)).Select(x => x.FileName).ToList();
+					if (changedDmis.Count == 0)
 					{
 						logger.LogDebug("Pull request has no changed .dmis, exiting");
 
@@ -135,7 +144,7 @@ namespace IconDiffBot.Core
 
 					logger.LogTrace("Pull request has icon changes, creating check run");
 
-					await GenerateDiffs(pullRequest, installationId, checkRunId, changedDmms, cancellationToken).ConfigureAwait(false);
+					await GenerateDiffs(pullRequest, installationId, checkRunId, changedDmis, cancellationToken).ConfigureAwait(false);
 				}
 				catch (OperationCanceledException)
 				{
@@ -176,12 +185,12 @@ namespace IconDiffBot.Core
 		/// <param name="pullRequest">The <see cref="PullRequest"/></param>
 		/// <param name="installationId">The <see cref="InstallationId.Id"/></param>
 		/// <param name="checkRunId">The <see cref="CheckRun.Id"/></param>
-		/// <param name="changedDmms">Paths to changed .dmm files</param>
+		/// <param name="changedDmis">Paths to changed .dmm files</param>
 		/// <param name="cancellationToken">The <see cref="CancellationToken"/> for the operation</param>
 		/// <returns>A <see cref="Task"/> representing the running operation</returns>
-		async Task GenerateDiffs(PullRequest pullRequest, long installationId, long checkRunId, IReadOnlyList<string> changedDmms, CancellationToken cancellationToken)
+		async Task GenerateDiffs(PullRequest pullRequest, long installationId, long checkRunId, IReadOnlyList<string> changedDmis, CancellationToken cancellationToken)
 		{
-			using (logger.BeginScope("Generating {0} diffs for pull request #{1} in {2}/{3}", changedDmms.Count, pullRequest.Number, pullRequest.Base.Repository.Owner.Login, pullRequest.Base.Repository.Name))
+			using (logger.BeginScope("Generating {0} diffs for pull request #{1} in {2}/{3}", changedDmis.Count, pullRequest.Number, pullRequest.Base.Repository.Owner.Login, pullRequest.Base.Repository.Name))
 			{
 				var gitHubManager = serviceProvider.GetRequiredService<IGitHubManager>();
 				var checkRunDequeueUpdate = gitHubManager.UpdateCheckRun(pullRequest.Base.Repository.Id, installationId, checkRunId, new CheckRunUpdate
@@ -190,9 +199,36 @@ namespace IconDiffBot.Core
 					Output = new CheckRunOutput(stringLocalizer["Generating Diffs"], stringLocalizer["Aww geez rick, I should eventually put some progress message here"], null, null),
 				}, cancellationToken);
 
-				//TODO
 				var results = new List<IconDiff>();
 
+				async Task DiffDmi(string path)
+				{
+					async Task<Bitmap> GetImageFor(string commit)
+					{
+						var data = await gitHubManager.GetFileAtCommit(pullRequest.Base.Repository.Id, installationId, path, commit, cancellationToken).ConfigureAwait(false);
+						return new Bitmap(new MemoryStream(data));
+					}
+
+					var beforeTask = GetImageFor(pullRequest.Base.Sha);
+					using (var after = await GetImageFor(pullRequest.Head.Sha).ConfigureAwait(false))
+					using (var before = await beforeTask.ConfigureAwait(false))
+					{
+						var diffs = await diffGenerator.GenerateDiffs(before, after, cancellationToken).ConfigureAwait(false);
+						lock (results) {
+							var baseCount = results.Count;
+							results.AddRange(diffs.Select(x =>
+							{
+								x.CheckRunId = checkRunId;
+								x.DmiPath = path;
+								x.FileId = ++baseCount;
+								x.RepositoryId = pullRequest.Base.Repository.Id;
+								return x;
+							}));
+						}
+					}
+				};
+
+				await Task.WhenAll(changedDmis.Select(x => DiffDmi(x))).ConfigureAwait(false);
 
 				await checkRunDequeueUpdate.ConfigureAwait(false);
 				await HandleResults(pullRequest, installationId, checkRunId, results, cancellationToken).ConfigureAwait(false);

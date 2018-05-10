@@ -1,6 +1,4 @@
-﻿using Microsoft.AspNetCore.Http;
-using Octokit;
-using System;
+﻿using Octokit;
 using System.Collections.Generic;
 using System.Threading;
 using System.Threading.Tasks;
@@ -30,6 +28,17 @@ namespace IconDiffBot.Core
 		/// <param name="cancellationToken">The <see cref="CancellationToken"/> for the operation</param>
 		/// <returns>A <see cref="Task{TResult}"/> resulting in a <see cref="IReadOnlyList{T}"/> of <see cref="PullRequestFile"/>s</returns>
 		Task<IReadOnlyList<PullRequestFile>> GetPullRequestChangedFiles(PullRequest pullRequest, long installationId, CancellationToken cancellationToken);
+
+		/// <summary>
+		/// Get the content of a <paramref name="filePath"/> at a given <paramref name="commit"/>
+		/// </summary>
+		/// <param name="repositoryId">The <see cref="Repository.Id"/></param>
+		/// <param name="installationId">The <see cref="InstallationId.Id"/></param>
+		/// <param name="filePath">The path to the file to download</param>
+		/// <param name="commit">The commit sha of the file to download</param>
+		/// <param name="cancellationToken">The <see cref="CancellationToken"/> for the operation</param>
+		/// <returns>A <see cref="Task{TResult}"/> resulting in a <see cref="byte"/> array of the file data</returns>
+		Task<byte[]> GetFileAtCommit(long repositoryId, long installationId, string filePath, string commit, CancellationToken cancellationToken);
 
 		/// <summary>
 		/// Update a <see cref="CheckRun"/>

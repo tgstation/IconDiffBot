@@ -122,5 +122,18 @@ namespace IconDiffBot.Core
 			var checkRun = await client.Checks.Runs.Create(repositoryId, initializer).ConfigureAwait(false);
 			return checkRun.Id;
 		}
+
+		/// <inheritdoc />
+		public async Task<byte[]> GetFileAtCommit(long repositoryId, long installationId, string filePath, string commit, CancellationToken cancellationToken)
+		{
+			if (String.IsNullOrWhiteSpace(filePath))
+				throw new ArgumentNullException(nameof(filePath));
+			if (String.IsNullOrWhiteSpace(commit))
+				throw new ArgumentNullException(nameof(commit));
+			logger.LogTrace("Get file for ref {0} on repository {1}", commit, repositoryId);
+			var client = await CreateInstallationClient(installationId, cancellationToken).ConfigureAwait(false);
+			var files = await client.Repository.Content.GetAllContentsByRef(repositoryId, filePath, commit).ConfigureAwait(false);
+			return Convert.FromBase64String(files[0].EncodedContent);
+		}
 	}
 }

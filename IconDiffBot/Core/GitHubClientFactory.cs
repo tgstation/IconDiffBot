@@ -2,16 +2,11 @@
 using IconDiffBot.Configuration;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
-using Newtonsoft.Json.Linq;
 using Octokit;
-using Octokit.Internal;
 using System;
-using System.Collections.Generic;
 using System.Globalization;
 using System.IO;
 using System.Reflection;
-using System.Threading;
-using System.Threading.Tasks;
 
 namespace IconDiffBot.Core
 {
@@ -36,10 +31,6 @@ namespace IconDiffBot.Core
 		/// </summary>
 		readonly GitHubConfiguration gitHubConfiguration;
 		/// <summary>
-		/// The <see cref="IWebRequestManager"/> for the <see cref="GitHubClientFactory"/>
-		/// </summary>
-		readonly IWebRequestManager webRequestManager;
-		/// <summary>
 		/// The <see cref="ILogger"/> for the <see cref="GitHubClientFactory"/>
 		/// </summary>
 		readonly ILogger logger;
@@ -48,12 +39,10 @@ namespace IconDiffBot.Core
 		/// Construct a <see cref="GitHubClientFactory"/>
 		/// </summary>
 		/// <param name="gitHubConfigurationOptions">The <see cref="IOptions{TOptions}"/> containing the value of <see cref="gitHubConfiguration"/></param>
-		/// <param name="webRequestManager">The value of <see cref="webRequestManager"/></param>
 		/// <param name="logger">The value of <see cref="logger"/></param>
-		public GitHubClientFactory(IOptions<GitHubConfiguration> gitHubConfigurationOptions, IWebRequestManager webRequestManager, ILogger<GitHubClientFactory> logger)
+		public GitHubClientFactory(IOptions<GitHubConfiguration> gitHubConfigurationOptions, ILogger<GitHubClientFactory> logger)
 		{
 			gitHubConfiguration = gitHubConfigurationOptions?.Value ?? throw new ArgumentNullException(nameof(gitHubConfigurationOptions));
-			this.webRequestManager = webRequestManager ?? throw new ArgumentNullException(nameof(webRequestManager));
 			this.logger = logger ?? throw new ArgumentNullException(nameof(logger));
 		}
 
@@ -83,15 +72,6 @@ namespace IconDiffBot.Core
 		{
 			logger.LogTrace("Opening private key file: {0}", gitHubConfiguration.PemPath);
 			return File.OpenText(gitHubConfiguration.PemPath);
-		}
-		
-		/// <inheritdoc />
-		public async Task<IReadOnlyList<Repository>> GetInstallationRepositories(string installationToken, CancellationToken cancellationToken)
-		{
-			var json = await webRequestManager.RunGet(new Uri("https://api.github.com/installation/repositories"), new List<string> { "Accept: application/vnd.github.machine-man-preview+json", String.Format(CultureInfo.InvariantCulture, "User-Agent: {0}", userAgent) , String.Format(CultureInfo.InvariantCulture, "Authorization: bearer {0}", installationToken) }, cancellationToken).ConfigureAwait(false);
-			var jsonObj = JObject.Parse(json);
-			var array = jsonObj["repositories"];
-			return new SimpleJsonSerializer().Deserialize<List<Repository>>(array.ToString());
 		}
 	}
 }
