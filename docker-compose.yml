@@ -1,8 +1,8 @@
 version: '3'
 
 services:
-  mapdiffbot:
-    image: mapdiffbot
+  icondiffbot:
+    image: icondiffbot
     build:
       context: .
-      dockerfile: MapDiffBot/Dockerfile
+      dockerfile: IconDiffBot/Dockerfile

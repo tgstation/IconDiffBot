@@ -16,7 +16,9 @@
     <ProjectGuid>bd6fdc27-3cbb-4b75-bd2f-86ab23f1b9fc</ProjectGuid>
     <DockerLaunchBrowser>True</DockerLaunchBrowser>
     <DockerServiceUrl>http://localhost:{ServicePort}</DockerServiceUrl>
-    <DockerServiceName>mapdiffbot</DockerServiceName>
+  </PropertyGroup>
+  <PropertyGroup>
+    <DockerServiceName>icondiffbot</DockerServiceName>
   </PropertyGroup>
   <ItemGroup>
     <None Include="docker-compose.override.yml">

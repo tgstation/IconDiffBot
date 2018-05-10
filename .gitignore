@@ -15,5 +15,5 @@ packages/*
 *.int
 *.pubxml
 /TestResults
-/MapDiffBot/appsettings.Development.json
+/IconDiffBot/appsettings.Development.json
 /obj/Docker

@@ -1,7 +1,7 @@
 version: '3'
 
 services:
-  mapdiffbot:
+  icondiffbot:
     environment:
       - ASPNETCORE_ENVIRONMENT=Development
     ports:
