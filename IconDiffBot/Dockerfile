@@ -2,11 +2,10 @@ FROM microsoft/aspnetcore-build AS build
 
 WORKDIR /src
 COPY IconDiffBot/* IconDiffBot/
-COPY IconDiffBot.Tests/* IconDiffBot.Tests/
 
-WORKDIR /src/IconDiffBot.Tests
+WORKDIR /src/IconDiffBot
 RUN dotnet restore
-RUN dotnet test -c Docker
+RUN dotnet build -c Docker
 
 WORKDIR /src/IconDiffBot
 RUN dotnet publish -c Docker -o /app && cp entrypoint.sh /app/
