@@ -12,6 +12,7 @@ using System.Collections.Generic;
 using System.Drawing;
 using System.Globalization;
 using System.Linq;
+using System.Text.RegularExpressions;
 using System.Threading;
 using System.Threading.Tasks;
 
@@ -121,7 +122,7 @@ namespace IconDiffBot.Core
 					CompletedAt = DateTimeOffset.Now,
 					Status = CheckStatus.Completed,
 					Conclusion = CheckConclusion.Neutral,
-					Output = new CheckRunOutput(stringLocalizer["Operation Cancelled"], stringLocalizer["The operation was cancelled on the server, most likely due to app shutdown. You may attempt re-running it."], null, null)
+					Output = new CheckRunOutput(stringLocalizer["Operation Cancelled"], stringLocalizer["The operation was cancelled on the server, most likely due to app shutdown. You may attempt re-running it."], null, null, null)
 				}, default);
 
 				try
@@ -137,7 +138,7 @@ namespace IconDiffBot.Core
 							CompletedAt = DateTimeOffset.Now,
 							Status = CheckStatus.Completed,
 							Conclusion = CheckConclusion.Neutral,
-							Output = new CheckRunOutput(stringLocalizer["No Modified Icons"], stringLocalizer["No modified .dnu files were detected in this pull request"], null, null)
+							Output = new CheckRunOutput(stringLocalizer["No Modified Icons"], stringLocalizer["No modified .dnu files were detected in this pull request"], null, null, null)
 						}, cancellationToken).ConfigureAwait(false);
 						return;
 					}
@@ -162,7 +163,7 @@ namespace IconDiffBot.Core
 							CompletedAt = DateTimeOffset.Now,
 							Status = CheckStatus.Completed,
 							Conclusion = CheckConclusion.Failure,
-							Output = new CheckRunOutput(stringLocalizer["Error rendering maps!"], stringLocalizer["Exception details:\n\n```\n{0}\n```\n\nPlease report this [here]({1})", e.ToString(), IssueReportUrl], null, null)
+							Output = new CheckRunOutput(stringLocalizer["Error rendering maps!"], stringLocalizer["Exception details:\n\n```\n{0}\n```\n\nPlease report this [here]({1})", e.ToString(), IssueReportUrl], null, null, null)
 						}, default).ConfigureAwait(false);
 						throw;
 					}
@@ -196,7 +197,7 @@ namespace IconDiffBot.Core
 				var checkRunDequeueUpdate = gitHubManager.UpdateCheckRun(pullRequest.Base.Repository.Id, installationId, checkRunId, new CheckRunUpdate
 				{
 					Status = CheckStatus.InProgress,
-					Output = new CheckRunOutput(stringLocalizer["Generating Diffs"], stringLocalizer["Aww geez rick, I should eventually put some progress message here"], null, null),
+					Output = new CheckRunOutput(stringLocalizer["Generating Diffs"], stringLocalizer["Aww geez rick, I should eventually put some progress message here"], null, null, null),
 				}, cancellationToken);
 
 				var results = new List<IconDiff>();
@@ -255,10 +256,13 @@ namespace IconDiffBot.Core
 			{
 				Capacity = diffResults.Count
 			};
+
+			var prefix = gitHubConfiguration.WebhookBaseUrl.ToString();
+
 			foreach (var kv in diffResults)
 			{
-				var beforeUrl = FilesController.RouteTo(pullRequest.Base.Repository, checkRunId, formatterCount, "before");
-				var afterUrl = FilesController.RouteTo(pullRequest.Base.Repository, checkRunId, formatterCount, "after");
+				var beforeUrl = String.Concat(prefix, FilesController.RouteTo(pullRequest.Base.Repository, checkRunId, formatterCount, "before"));
+				var afterUrl = String.Concat(prefix, FilesController.RouteTo(pullRequest.Base.Repository, checkRunId, formatterCount, "after"));
 
 				logger.LogTrace("Adding IconDiff for {0}...", kv.DmiPath);
 				outputImages.Add(new CheckRunImage(null, beforeUrl, stringLocalizer["Old - {0}", kv.DmiPath]));
@@ -275,7 +279,7 @@ namespace IconDiffBot.Core
 			{
 				Status = CheckStatus.Completed,
 				CompletedAt = DateTimeOffset.Now,
-				Output = new CheckRunOutput(stringLocalizer["Icon Diffs"], null, null, outputImages),
+				Output = new CheckRunOutput(stringLocalizer["Icon Diffs"], String.Empty, null, null, outputImages),
 				Conclusion = CheckConclusion.Success
 			};
 			await serviceProvider.GetRequiredService<IGitHubManager>().UpdateCheckRun(pullRequest.Base.Repository.Id, installationId, checkRunId, ncr, cancellationToken).ConfigureAwait(false);
@@ -289,6 +293,7 @@ namespace IconDiffBot.Core
 			backgroundJobClient.Enqueue(() => ScanPullRequest(payload.Repository.Id, payload.PullRequest.Number, payload.Installation.Id, JobCancellationToken.Null));
 		}
 
+		/// <inheritdoc />
 		public async Task ProcessPayload(CheckSuiteEventPayload payload, IGitHubManager gitHubManager, CancellationToken cancellationToken)
 		{
 			if (payload.Action != "requested" || payload.Action != "rerequested")
@@ -307,10 +312,37 @@ namespace IconDiffBot.Core
 					HeadBranch = payload.CheckSuite.HeadBranch,
 					HeadSha = payload.CheckSuite.HeadSha,
 					Name = nmc,
-					Output = new CheckRunOutput(nmc, null, null, null),
+					Output = new CheckRunOutput(nmc, String.Empty, null, null, null),
 					Status = CheckStatus.Completed
 				}, cancellationToken).ConfigureAwait(false);
-			}			
+			}
+		}
+
+		/// <inheritdoc />
+		public async Task ProcessPayload(CheckRunEventPayload payload, IGitHubManager gitHubManager, CancellationToken cancellationToken)
+		{
+			if (payload.Action != "rerequested")
+				return;
+			//nice thing about check runs we know they contain our pull request number in the title
+			var prRegex = Regex.Match(payload.CheckRun.Name, "#([1-9][0-9]*)");
+			if (prRegex.Success)
+				backgroundJobClient.Enqueue(() => ScanPullRequest(payload.Repository.Id, Convert.ToInt32(prRegex.Groups[1].Value, CultureInfo.InvariantCulture), payload.Installation.Id, JobCancellationToken.Null));
+			else
+			{
+				var now = DateTimeOffset.Now;
+				var nmc = stringLocalizer["No Associated Pull Request"];
+				await gitHubManager.CreateCheckRun(payload.Repository.Id, payload.Installation.Id, new NewCheckRun
+				{
+					CompletedAt = now,
+					StartedAt = now,
+					Conclusion = CheckConclusion.Neutral,
+					HeadBranch = payload.CheckRun.CheckSuite.HeadBranch,
+					HeadSha = payload.CheckRun.CheckSuite.HeadSha,
+					Name = nmc,
+					Output = new CheckRunOutput(nmc, String.Empty, null, null, null),
+					Status = CheckStatus.Completed
+				}, cancellationToken).ConfigureAwait(false);
+			}
 		}
 	}
 }
