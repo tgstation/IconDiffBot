@@ -99,6 +99,97 @@ namespace IconDiffBot.Core
 		}
 
 		/// <summary>
+		/// Generates a icon diff for the specified <see cref="PullRequest"/>
+		/// </summary>
+		/// <param name="repositoryId">The <see cref="PullRequest.Base"/> <see cref="Repository.Id"/></param>
+		/// <param name="pullRequestNumber">The <see cref="PullRequest.Number"/></param>
+		/// <param name="installationId">The <see cref="InstallationId.Id"/></param>
+		/// <param name="scope">The <see cref="IServiceScope"/> for the operation</param>
+		/// <param name="cancellationToken">The <see cref="CancellationToken"/> for the operation</param>
+		/// <returns>A <see cref="Task"/> representing the running operation</returns>
+		async Task ScanPullRequestImpl(long repositoryId, int pullRequestNumber, long installationId, IServiceScope scope, CancellationToken cancellationToken)
+		{
+			var gitHubManager = scope.ServiceProvider.GetRequiredService<IGitHubManager>();
+			var pullRequest = await gitHubManager.GetPullRequest(repositoryId, installationId, pullRequestNumber, cancellationToken).ConfigureAwait(false);
+
+			logger.LogTrace("Repository is {0}/{1}", pullRequest.Base.Repository.Owner.Login, pullRequest.Base.Repository.Name);
+			logger.LogTrace("Pull Request: \"{0}\" by {1}", pullRequest.Title, pullRequest.User.Login);
+
+			var allChangedFilesTask = gitHubManager.GetPullRequestChangedFiles(pullRequest, installationId, cancellationToken);
+			var requestIdentifier = String.Concat(pullRequest.Base.Repository.Owner.Login, pullRequest.Base.Repository.Name, pullRequest.Number);
+
+			var ncr = new NewCheckRun
+			{
+				HeadSha = pullRequest.Head.Sha,
+				Name = String.Format(CultureInfo.InvariantCulture, "Renderings - Pull Request #{0}", pullRequest.Number),
+				StartedAt = DateTimeOffset.Now,
+				Status = CheckStatus.Queued
+			};
+			var checkRunId = await gitHubManager.CreateCheckRun(repositoryId, installationId, ncr, cancellationToken).ConfigureAwait(false);
+
+			Task HandleCancel() => gitHubManager.UpdateCheckRun(repositoryId, installationId, checkRunId, new CheckRunUpdate
+			{
+				CompletedAt = DateTimeOffset.Now,
+				Status = CheckStatus.Completed,
+				Conclusion = CheckConclusion.Neutral,
+				Output = new CheckRunOutput(stringLocalizer["Operation Cancelled"], stringLocalizer["The operation was cancelled on the server, most likely due to app shutdown. You may attempt re-running it."], null, null, null)
+			}, default);
+
+			try
+			{
+				var allChangedFiles = await allChangedFilesTask.ConfigureAwait(false);
+				var changedDmis = allChangedFiles.Where(x => x.FileName.EndsWith(".dmi", StringComparison.InvariantCultureIgnoreCase)).Select(x => x.FileName).ToList();
+				if (changedDmis.Count == 0)
+				{
+					logger.LogDebug("Pull request has no changed .dmis, exiting");
+
+					await gitHubManager.UpdateCheckRun(repositoryId, installationId, checkRunId, new CheckRunUpdate
+					{
+						CompletedAt = DateTimeOffset.Now,
+						Status = CheckStatus.Completed,
+						Conclusion = CheckConclusion.Neutral,
+						Output = new CheckRunOutput(stringLocalizer["No Modified Icons"], stringLocalizer["No modified .dnu files were detected in this pull request"], null, null, null)
+					}, cancellationToken).ConfigureAwait(false);
+					return;
+				}
+
+				logger.LogTrace("Pull request has icon changes, creating check run");
+
+				await GenerateDiffs(pullRequest, installationId, checkRunId, changedDmis, scope, cancellationToken).ConfigureAwait(false);
+			}
+			catch (OperationCanceledException)
+			{
+				logger.LogTrace("Operation cancelled");
+
+				await HandleCancel().ConfigureAwait(false);
+			}
+			catch (Exception e)
+			{
+				logger.LogDebug(e, "Error occurred. Attempting to post debug comment");
+				try
+				{
+					await gitHubManager.UpdateCheckRun(repositoryId, installationId, checkRunId, new CheckRunUpdate
+					{
+						CompletedAt = DateTimeOffset.Now,
+						Status = CheckStatus.Completed,
+						Conclusion = CheckConclusion.Failure,
+						Output = new CheckRunOutput(stringLocalizer["Error rendering maps!"], stringLocalizer["Exception details:\n\n```\n{0}\n```\n\nPlease report this [here]({1})", e.ToString(), IssueReportUrl], null, null, null)
+					}, default).ConfigureAwait(false);
+					throw;
+				}
+				catch (OperationCanceledException)
+				{
+					logger.LogTrace("Operation cancelled");
+					await HandleCancel().ConfigureAwait(false);
+				}
+				catch (Exception innerException)
+				{
+					throw new AggregateException(innerException, e);
+				}
+			}
+		}
+
+		/// <summary>
 		/// Checks a <see cref="CheckSuite"/> for existing <see cref="CheckRun"/>s and calls <see cref="ScanPullRequest(long, int, long, IJobCancellationToken)"/> as necessary
 		/// </summary>
 		/// <param name="repositoryId">The <see cref="PullRequest.Base"/> <see cref="Repository.Id"/></param>
@@ -107,6 +198,7 @@ namespace IconDiffBot.Core
 		/// <param name="checkSuiteSha">The <see cref="CheckSuite.HeadSha"/></param>
 		/// <param name="jobCancellationToken">The <see cref="IJobCancellationToken"/> for the operation</param>
 		/// <returns>A <see cref="Task"/> representing the running operation</returns>
+		[AutomaticRetry(Attempts = 0)]
 		public async Task ScanCheckSuite(long repositoryId, long installationId, long checkSuiteId, string checkSuiteSha, IJobCancellationToken jobCancellationToken)
 		{
 			using (logger.BeginScope("Scanning check suite {0} for repository {1}. Sha: ", checkSuiteId, repositoryId, checkSuiteSha))
@@ -123,7 +215,7 @@ namespace IconDiffBot.Core
 					if (result.HasValue)
 					{
 						testedAny = true;
-						return ScanPullRequest(repositoryId, result.Value, installationId, jobCancellationToken);
+						return ScanPullRequestImpl(repositoryId, result.Value, installationId, scope, cancellationToken);
 					}
 					return Task.CompletedTask;
 				})).ConfigureAwait(false);
@@ -147,7 +239,7 @@ namespace IconDiffBot.Core
 		}
 
 		/// <summary>
-		/// Generates a map diff comment for the specified <see cref="PullRequest"/>
+		/// Generates a icon diff for the specified <see cref="PullRequest"/>
 		/// </summary>
 		/// <param name="repositoryId">The <see cref="PullRequest.Base"/> <see cref="Repository.Id"/></param>
 		/// <param name="pullRequestNumber">The <see cref="PullRequest.Number"/></param>
@@ -158,88 +250,8 @@ namespace IconDiffBot.Core
 		public async Task ScanPullRequest(long repositoryId, int pullRequestNumber, long installationId, IJobCancellationToken jobCancellationToken)
 		{
 			using (logger.BeginScope("Scanning pull request #{0} for repository {1}", pullRequestNumber, repositoryId))
-			using (serviceProvider.CreateScope())
-			{
-				var cancellationToken = jobCancellationToken.ShutdownToken;
-				var gitHubManager = serviceProvider.GetRequiredService<IGitHubManager>();
-				var pullRequest = await gitHubManager.GetPullRequest(repositoryId, installationId, pullRequestNumber, cancellationToken).ConfigureAwait(false);
-
-				logger.LogTrace("Repository is {0}/{1}", pullRequest.Base.Repository.Owner.Login, pullRequest.Base.Repository.Name);
-				logger.LogTrace("Pull Request: \"{0}\" by {1}", pullRequest.Title, pullRequest.User.Login);
-
-				var allChangedFilesTask = gitHubManager.GetPullRequestChangedFiles(pullRequest, installationId, cancellationToken);
-				var requestIdentifier = String.Concat(pullRequest.Base.Repository.Owner.Login, pullRequest.Base.Repository.Name, pullRequest.Number);
-
-				var ncr = new NewCheckRun
-				{
-					HeadSha = pullRequest.Head.Sha,
-					Name = String.Format(CultureInfo.InvariantCulture, "Renderings - Pull Request #{0}", pullRequest.Number),
-					StartedAt = DateTimeOffset.Now,
-					Status = CheckStatus.Queued
-				};
-				var checkRunId = await gitHubManager.CreateCheckRun(repositoryId, installationId, ncr, cancellationToken).ConfigureAwait(false);
-
-				Task HandleCancel() => gitHubManager.UpdateCheckRun(repositoryId, installationId, checkRunId, new CheckRunUpdate
-				{
-					CompletedAt = DateTimeOffset.Now,
-					Status = CheckStatus.Completed,
-					Conclusion = CheckConclusion.Neutral,
-					Output = new CheckRunOutput(stringLocalizer["Operation Cancelled"], stringLocalizer["The operation was cancelled on the server, most likely due to app shutdown. You may attempt re-running it."], null, null, null)
-				}, default);
-
-				try
-				{
-					var allChangedFiles = await allChangedFilesTask.ConfigureAwait(false);
-					var changedDmis = allChangedFiles.Where(x => x.FileName.EndsWith(".dmi", StringComparison.InvariantCultureIgnoreCase)).Select(x => x.FileName).ToList();
-					if (changedDmis.Count == 0)
-					{
-						logger.LogDebug("Pull request has no changed .dmis, exiting");
-
-						await gitHubManager.UpdateCheckRun(repositoryId, installationId, checkRunId, new CheckRunUpdate
-						{
-							CompletedAt = DateTimeOffset.Now,
-							Status = CheckStatus.Completed,
-							Conclusion = CheckConclusion.Neutral,
-							Output = new CheckRunOutput(stringLocalizer["No Modified Icons"], stringLocalizer["No modified .dnu files were detected in this pull request"], null, null, null)
-						}, cancellationToken).ConfigureAwait(false);
-						return;
-					}
-
-					logger.LogTrace("Pull request has icon changes, creating check run");
-
-					await GenerateDiffs(pullRequest, installationId, checkRunId, changedDmis, cancellationToken).ConfigureAwait(false);
-				}
-				catch (OperationCanceledException)
-				{
-					logger.LogTrace("Operation cancelled");
-
-					await HandleCancel().ConfigureAwait(false);
-				}
-				catch (Exception e)
-				{
-					logger.LogDebug(e, "Error occurred. Attempting to post debug comment");
-					try
-					{
-						await gitHubManager.UpdateCheckRun(repositoryId, installationId, checkRunId, new CheckRunUpdate
-						{
-							CompletedAt = DateTimeOffset.Now,
-							Status = CheckStatus.Completed,
-							Conclusion = CheckConclusion.Failure,
-							Output = new CheckRunOutput(stringLocalizer["Error rendering maps!"], stringLocalizer["Exception details:\n\n```\n{0}\n```\n\nPlease report this [here]({1})", e.ToString(), IssueReportUrl], null, null, null)
-						}, default).ConfigureAwait(false);
-						throw;
-					}
-					catch (OperationCanceledException)
-					{
-						logger.LogTrace("Operation cancelled");
-						await HandleCancel().ConfigureAwait(false);
-					}
-					catch (Exception innerException)
-					{
-						throw new AggregateException(innerException, e);
-					}
-				}
-			}
+			using (var scope = serviceProvider.CreateScope())
+				await ScanPullRequestImpl(repositoryId, pullRequestNumber, installationId, scope, jobCancellationToken.ShutdownToken).ConfigureAwait(false);
 		}
 
 		/// <summary>
@@ -249,13 +261,14 @@ namespace IconDiffBot.Core
 		/// <param name="installationId">The <see cref="InstallationId.Id"/></param>
 		/// <param name="checkRunId">The <see cref="CheckRun.Id"/></param>
 		/// <param name="changedDmis">Paths to changed .dmm files</param>
+		/// <param name="scope">The <see cref="IServiceScope"/> for the operation</param>
 		/// <param name="cancellationToken">The <see cref="CancellationToken"/> for the operation</param>
 		/// <returns>A <see cref="Task"/> representing the running operation</returns>
-		async Task GenerateDiffs(PullRequest pullRequest, long installationId, long checkRunId, IReadOnlyList<string> changedDmis, CancellationToken cancellationToken)
+		async Task GenerateDiffs(PullRequest pullRequest, long installationId, long checkRunId, IReadOnlyList<string> changedDmis, IServiceScope scope, CancellationToken cancellationToken)
 		{
 			using (logger.BeginScope("Generating {0} diffs for pull request #{1} in {2}/{3}", changedDmis.Count, pullRequest.Number, pullRequest.Base.Repository.Owner.Login, pullRequest.Base.Repository.Name))
 			{
-				var gitHubManager = serviceProvider.GetRequiredService<IGitHubManager>();
+				var gitHubManager = scope.ServiceProvider.GetRequiredService<IGitHubManager>();
 				var checkRunDequeueUpdate = gitHubManager.UpdateCheckRun(pullRequest.Base.Repository.Id, installationId, checkRunId, new CheckRunUpdate
 				{
 					Status = CheckStatus.InProgress,
@@ -294,7 +307,7 @@ namespace IconDiffBot.Core
 				await Task.WhenAll(changedDmis.Select(x => DiffDmi(x))).ConfigureAwait(false);
 
 				await checkRunDequeueUpdate.ConfigureAwait(false);
-				await HandleResults(pullRequest, installationId, checkRunId, results, cancellationToken).ConfigureAwait(false);
+				await HandleResults(pullRequest, installationId, checkRunId, results, scope, cancellationToken).ConfigureAwait(false);
 			}
 		}
 
@@ -305,13 +318,14 @@ namespace IconDiffBot.Core
 		/// <param name="installationId">The <see cref="InstallationId.Id"/></param>
 		/// <param name="checkRunId">The <see cref="CheckRun.Id"/></param>
 		/// <param name="diffResults">The <see cref="IconDiff"/>s</param>
+		/// <param name="scope">The <see cref="IServiceScope"/> for the operation</param>
 		/// <param name="cancellationToken">The <see cref="CancellationToken"/> for the operation</param>
 		/// <returns>A <see cref="Task"/> representing the running operation</returns>
-		async Task HandleResults(PullRequest pullRequest, long installationId, long checkRunId, List<IconDiff> diffResults, CancellationToken cancellationToken)
+		async Task HandleResults(PullRequest pullRequest, long installationId, long checkRunId, List<IconDiff> diffResults, IServiceScope scope, CancellationToken cancellationToken)
 		{
 			int formatterCount = 0;
 
-			var databaseContext = serviceProvider.GetRequiredService<IDatabaseContext>();
+			var databaseContext = scope.ServiceProvider.GetRequiredService<IDatabaseContext>();
 			logger.LogTrace("Generating check run output and preparing database query...");
 
 			var outputImages = new List<CheckRunImage>()
@@ -344,7 +358,7 @@ namespace IconDiffBot.Core
 				Output = new CheckRunOutput(stringLocalizer["Icon Diffs"], String.Empty, null, null, outputImages),
 				Conclusion = CheckConclusion.Success
 			};
-			await serviceProvider.GetRequiredService<IGitHubManager>().UpdateCheckRun(pullRequest.Base.Repository.Id, installationId, checkRunId, ncr, cancellationToken).ConfigureAwait(false);
+			await scope.ServiceProvider.GetRequiredService<IGitHubManager>().UpdateCheckRun(pullRequest.Base.Repository.Id, installationId, checkRunId, ncr, cancellationToken).ConfigureAwait(false);
 		}
 
 		/// <inheritdoc />
