@@ -85,6 +85,68 @@ namespace IconDiffBot.Core
 		}
 
 		/// <summary>
+		/// Identifies the <see cref="PullRequest.Number"/> a <see cref="CheckRun"/> originated from
+		/// </summary>
+		/// <param name="checkRun">The <see cref="CheckRun"/> to test</param>
+		/// <returns>The associated <see cref="PullRequest.Number"/> on success, <see langword="null"/> on failure</returns>
+		static int? GetPullRequestNumberFromCheckRun(CheckRun checkRun)
+		{
+			//nice thing about check runs we know they contain our pull request number in the title
+			var prRegex = Regex.Match(checkRun.Name, "#([1-9][0-9]*)");
+			if (prRegex.Success)
+				return Convert.ToInt32(prRegex.Groups[1].Value, CultureInfo.InvariantCulture);
+			return null;
+		}
+
+		/// <summary>
+		/// Checks a <see cref="CheckSuite"/> for existing <see cref="CheckRun"/>s and calls <see cref="ScanPullRequest(long, int, long, IJobCancellationToken)"/> as necessary
+		/// </summary>
+		/// <param name="repositoryId">The <see cref="PullRequest.Base"/> <see cref="Repository.Id"/></param>
+		/// <param name="installationId">The <see cref="InstallationId.Id"/></param>
+		/// <param name="checkSuiteId">The <see cref="CheckSuite.Id"/></param>
+		/// <param name="checkSuiteSha">The <see cref="CheckSuite.HeadSha"/></param>
+		/// <param name="jobCancellationToken">The <see cref="IJobCancellationToken"/> for the operation</param>
+		/// <returns>A <see cref="Task"/> representing the running operation</returns>
+		public async Task ScanCheckSuite(long repositoryId, long installationId, long checkSuiteId, string checkSuiteSha, IJobCancellationToken jobCancellationToken)
+		{
+			using (logger.BeginScope("Scanning check suite {0} for repository {1}. Sha: ", checkSuiteId, repositoryId, checkSuiteSha))
+			using (var scope = serviceProvider.CreateScope())
+			{
+				var gitHubManager = scope.ServiceProvider.GetRequiredService<IGitHubManager>();
+				var cancellationToken = jobCancellationToken.ShutdownToken;
+				var checkRuns = await gitHubManager.GetMatchingCheckRuns(repositoryId, installationId, checkSuiteId, checkSuiteSha, cancellationToken).ConfigureAwait(false);
+				bool testedAny = false;
+
+				await Task.WhenAll(checkRuns.Select(x =>
+				{
+					var result = GetPullRequestNumberFromCheckRun(x);
+					if (result.HasValue)
+					{
+						testedAny = true;
+						return ScanPullRequest(repositoryId, result.Value, installationId, jobCancellationToken);
+					}
+					return Task.CompletedTask;
+				})).ConfigureAwait(false);
+
+				if (!testedAny)
+				{
+					var now = DateTimeOffset.Now;
+					var nmc = stringLocalizer["No Known Associated Pull Request"];
+					await gitHubManager.CreateCheckRun(repositoryId, installationId, new NewCheckRun
+					{
+						CompletedAt = now,
+						StartedAt = now,
+						Conclusion = CheckConclusion.Neutral,
+						HeadSha = checkSuiteSha,
+						Name = nmc,
+						Output = new CheckRunOutput(nmc, stringLocalizer["No pull requests could be associated with this check suite"], null, null, null),
+						Status = CheckStatus.Completed
+					}, cancellationToken).ConfigureAwait(false);
+				}
+			}
+		}
+
+		/// <summary>
 		/// Generates a map diff comment for the specified <see cref="PullRequest"/>
 		/// </summary>
 		/// <param name="repositoryId">The <see cref="PullRequest.Base"/> <see cref="Repository.Id"/></param>
@@ -294,39 +356,27 @@ namespace IconDiffBot.Core
 		}
 
 		/// <inheritdoc />
-		public async Task ProcessPayload(CheckSuiteEventPayload payload, IGitHubManager gitHubManager, CancellationToken cancellationToken)
+		public void ProcessPayload(CheckSuiteEventPayload payload)
 		{
 			if (payload.Action != "requested" && payload.Action != "rerequested")
 				return;
+
+			//don't rely on CheckSuite.PullRequests, it doesn't include PRs from forks.
+			backgroundJobClient.Enqueue(() => ScanCheckSuite(payload.Repository.Id, payload.Installation.Id, payload.CheckSuite.Id, payload.CheckSuite.HeadSha, JobCancellationToken.Null));
+
 			if (payload.CheckSuite.PullRequests.Any())
 				foreach (var I in payload.CheckSuite.PullRequests)
 					backgroundJobClient.Enqueue(() => ScanPullRequest(payload.Repository.Id, I.Number, payload.Installation.Id, JobCancellationToken.Null));
-			else {
-				var now = DateTimeOffset.Now;
-				var nmc = stringLocalizer["No Associated Pull Request"];
-				await gitHubManager.CreateCheckRun(payload.Repository.Id, payload.Installation.Id, new NewCheckRun
-				{
-					CompletedAt = now,
-					StartedAt = now,
-					Conclusion = CheckConclusion.Neutral,
-					HeadBranch = payload.CheckSuite.HeadBranch,
-					HeadSha = payload.CheckSuite.HeadSha,
-					Name = nmc,
-					Output = new CheckRunOutput(nmc, String.Empty, null, null, null),
-					Status = CheckStatus.Completed
-				}, cancellationToken).ConfigureAwait(false);
-			}
-		}
+		}        
 
 		/// <inheritdoc />
 		public async Task ProcessPayload(CheckRunEventPayload payload, IGitHubManager gitHubManager, CancellationToken cancellationToken)
 		{
 			if (payload.Action != "rerequested")
 				return;
-			//nice thing about check runs we know they contain our pull request number in the title
-			var prRegex = Regex.Match(payload.CheckRun.Name, "#([1-9][0-9]*)");
-			if (prRegex.Success)
-				backgroundJobClient.Enqueue(() => ScanPullRequest(payload.Repository.Id, Convert.ToInt32(prRegex.Groups[1].Value, CultureInfo.InvariantCulture), payload.Installation.Id, JobCancellationToken.Null));
+			var prNumber = GetPullRequestNumberFromCheckRun(payload.CheckRun);
+			if(prNumber.HasValue)
+				backgroundJobClient.Enqueue(() => ScanPullRequest(payload.Repository.Id, prNumber.Value, payload.Installation.Id, JobCancellationToken.Null));
 			else
 			{
 				var now = DateTimeOffset.Now;
