@@ -296,7 +296,7 @@ namespace IconDiffBot.Core
 		/// <inheritdoc />
 		public async Task ProcessPayload(CheckSuiteEventPayload payload, IGitHubManager gitHubManager, CancellationToken cancellationToken)
 		{
-			if (payload.Action != "requested" || payload.Action != "rerequested")
+			if (payload.Action != "requested" && payload.Action != "rerequested")
 				return;
 			if (payload.CheckSuite.PullRequests.Any())
 				foreach (var I in payload.CheckSuite.PullRequests)
