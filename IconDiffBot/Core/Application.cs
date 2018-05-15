@@ -70,6 +70,7 @@ namespace IconDiffBot.Core
 
 			services.AddSingleton<IWebRequestManager, WebRequestManager>();
 			services.AddSingleton<IPayloadProcessor, PayloadProcessor>();
+			services.AddSingleton<IDiffGenerator, DiffGenerator>();
 		}
 
 		/// <summary>
