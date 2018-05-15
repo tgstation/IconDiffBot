@@ -10,7 +10,6 @@ using Microsoft.Extensions.Options;
 using Octokit;
 using System;
 using System.Collections.Generic;
-using System.Drawing;
 using System.Globalization;
 using System.Linq;
 using System.Text.RegularExpressions;
@@ -206,10 +205,10 @@ namespace IconDiffBot.Core
 				int fileIdCounter = 0;
 				async Task DiffDmi(string path)
 				{
-					async Task<Bitmap> GetImageFor(string commit)
+					async Task<MemoryStream> GetImageFor(string commit)
 					{
 						var data = await gitHubManager.GetFileAtCommit(pullRequest.Base.Repository.Id, installationId, path, commit, cancellationToken).ConfigureAwait(false);
-						return new Bitmap(new MemoryStream(data));
+						return new MemoryStream(data);
 					}
 
 					var beforeTask = GetImageFor(pullRequest.Base.Sha);
@@ -219,14 +218,14 @@ namespace IconDiffBot.Core
 						var diffs = await diffGenerator.GenerateDiffs(before, after, cancellationToken).ConfigureAwait(false);
 						async Task<IconDiff> CheckDiffImages(IconDiff iconDiff)
 						{
-							IQueryable<IconState> query;
+							IQueryable<Models.Image> query;
 
 							if (iconDiff.Before == null || iconDiff.After == null)
-								query = databaseContext.IconStates.Where(x => x.Sha1 == (iconDiff.Before == null ? iconDiff.After.Sha1 : iconDiff.Before.Sha1));
+								query = databaseContext.Images.Where(x => x.Sha1 == (iconDiff.Before == null ? iconDiff.After.Sha1 : iconDiff.Before.Sha1));
 							else
-								query = databaseContext.IconStates.Where(x => x.Sha1 == iconDiff.Before.Sha1 || x.Sha1 == iconDiff.After.Sha1);
+								query = databaseContext.Images.Where(x => x.Sha1 == iconDiff.Before.Sha1 || x.Sha1 == iconDiff.After.Sha1);
 
-							var matchingImages = await query.Select(x => new IconState
+							var matchingImages = await query.Select(x => new Image
 							{
 								Id = x.Id
 							}).ToListAsync(cancellationToken).ConfigureAwait(false);
@@ -235,20 +234,20 @@ namespace IconDiffBot.Core
 							var afterQueryResult = matchingImages.FirstOrDefault(x => x.Sha1 == iconDiff.Before?.Sha1);
 							lock (databaseContext)
 							{
-								if (beforeQueryResult != default(IconState))
+								if (beforeQueryResult != default(Models.Image))
 								{
-									databaseContext.IconStates.Attach(beforeQueryResult);
+									databaseContext.Images.Attach((Models.Image)beforeQueryResult);
 									iconDiff.Before = beforeQueryResult;
 								}
 								else if (iconDiff.Before != null)
-									databaseContext.IconStates.Add(iconDiff.Before);
-								if (afterQueryResult != default(IconState))
+									databaseContext.Images.Add(iconDiff.Before);
+								if (afterQueryResult != default(Models.Image))
 								{
-									databaseContext.IconStates.Attach(afterQueryResult);
+									databaseContext.Images.Attach((Models.Image)afterQueryResult);
 									iconDiff.Before = afterQueryResult;
 								}
 								else if (iconDiff.Before != null)
-									databaseContext.IconStates.Add(iconDiff.Before);
+									databaseContext.Images.Add(iconDiff.Before);
 							}
 							return iconDiff;
 						};

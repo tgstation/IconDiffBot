@@ -5,7 +5,7 @@ namespace IconDiffBot.Models
 	/// <summary>
 	/// Represents binary image data
 	/// </summary>
-	public sealed class IconState
+	public sealed class Image
 	{
 		/// <summary>
 		/// The column Id

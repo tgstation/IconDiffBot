@@ -21,9 +21,9 @@ namespace IconDiffBot.Models
 		DbSet<IconDiff> IconDiffs { get; set; }
 
 		/// <summary>
-		/// The <see cref="IconState"/>s in the database
+		/// The <see cref="Image"/>s in the database
 		/// </summary>
-		DbSet<IconState> IconStates { get; set; }
+		DbSet<Image> Images { get; set; }
 
 		/// <summary>
 		/// Save changes to the <see cref="IDatabaseContext"/>
