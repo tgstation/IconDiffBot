@@ -136,16 +136,10 @@ namespace IconDiffBot.Core
 			return Convert.FromBase64String(files[0].EncodedContent);
 		}
 
-		public async Task<IEnumerable<CheckRun>> GetMatchingCheckRuns(long repositoryId, long installationId, long checkSuiteId, string checkSuiteSha, CancellationToken cancellationToken)
+		public async Task<IEnumerable<CheckRun>> GetMatchingCheckRuns(long repositoryId, long installationId, long checkSuiteId, CancellationToken cancellationToken)
 		{
-			if (String.IsNullOrWhiteSpace(checkSuiteSha))
-				throw new ArgumentNullException(nameof(checkSuiteSha));
 			var client = await CreateInstallationClient(installationId, cancellationToken).ConfigureAwait(false);
-			var runs = await client.Check.Run.GetAllForReference(repositoryId, checkSuiteSha, new CheckRunRequest
-			{
-				Filter = CheckRunRequestFilter.Latest
-			}).ConfigureAwait(false);
-			return runs.Where(x => x.CheckSuite.Id == checkSuiteId);
+			return await client.Check.Run.GetAllForCheckSuite(repositoryId, checkSuiteId).ConfigureAwait(false);
 		}
 	}
 }

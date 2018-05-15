@@ -206,7 +206,7 @@ namespace IconDiffBot.Core
 			{
 				var gitHubManager = scope.ServiceProvider.GetRequiredService<IGitHubManager>();
 				var cancellationToken = jobCancellationToken.ShutdownToken;
-				var checkRuns = await gitHubManager.GetMatchingCheckRuns(repositoryId, installationId, checkSuiteId, checkSuiteSha, cancellationToken).ConfigureAwait(false);
+				var checkRuns = await gitHubManager.GetMatchingCheckRuns(repositoryId, installationId, checkSuiteId, cancellationToken).ConfigureAwait(false);
 				bool testedAny = false;
 
 				await Task.WhenAll(checkRuns.Select(x =>

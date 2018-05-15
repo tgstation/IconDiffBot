@@ -62,14 +62,13 @@ namespace IconDiffBot.Core
 		Task<long> CreateCheckRun(long repositoryId, long installationId, NewCheckRun newCheckRun, CancellationToken cancellationToken);
 
 		/// <summary>
-		/// Get <see cref="CheckRun"/>s matching a <paramref name="checkSuiteSha"/>
+		/// Get <see cref="CheckRun"/>s matching a <paramref name="checkSuiteId"/>
 		/// </summary>
 		/// <param name="repositoryId">The <see cref="Repository.Id"/></param>
 		/// <param name="installationId">The <see cref="InstallationId.Id"/></param>
 		/// <param name="checkSuiteId">The <see cref="CheckSuite.Id"/></param>
-		/// <param name="checkSuiteSha">The <see cref="CheckSuite.HeadSha"/></param>
 		/// <param name="cancellationToken">The <see cref="CancellationToken"/> for the operation</param>
 		/// <returns>A <see cref="Task{TResult}"/> resulting in an <see cref="IEnumerable{T}"/> of relevant <see cref="CheckRun"/>s</returns>
-		Task<IEnumerable<CheckRun>> GetMatchingCheckRuns(long repositoryId, long installationId, long checkSuiteId, string checkSuiteSha, CancellationToken cancellationToken);
+		Task<IEnumerable<CheckRun>> GetMatchingCheckRuns(long repositoryId, long installationId, long checkSuiteId, CancellationToken cancellationToken);
     }
 }
