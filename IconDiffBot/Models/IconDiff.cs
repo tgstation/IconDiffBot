@@ -36,17 +36,30 @@ namespace IconDiffBot.Models
 		public string DmiPath { get; set; }
 
 		/// <summary>
-		/// The before image
+		/// The <see cref="IconState.Name"/>
 		/// </summary>
-#pragma warning disable CA1819 // Properties should not return arrays
-		public byte[] BeforeImage { get; set; }
-#pragma warning restore CA1819 // Properties should not return arrays
+		[Required]
+		public string StateName { get; set; }
+
 
 		/// <summary>
-		/// The after image
+		/// The <see cref="Before"/> <see cref="Image.Id"/>
 		/// </summary>
-#pragma warning disable CA1819 // Properties should not return arrays
-		public byte[] AfterImage { get; set; }
-#pragma warning restore CA1819 // Properties should not return arrays
+		public long BeforeId { get; set; }
+
+		/// <summary>
+		/// The before <see cref="Image"/>
+		/// </summary>
+		public Image Before { get; set; }
+
+		/// <summary>
+		/// The <see cref="After"/> <see cref="Image.Id"/>
+		/// </summary>
+		public long AfterId { get; set; }
+
+		/// <summary>
+		/// The after <see cref="Image"/>
+		/// </summary>
+		public Image After { get; set; }
 	}
 }

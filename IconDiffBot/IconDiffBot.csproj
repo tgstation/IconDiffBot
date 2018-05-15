@@ -22,10 +22,17 @@
   </PropertyGroup>
 
   <ItemGroup>
-    <PackageReference Include="Cyberboss.AspNetCore.AsyncInitializer" Version="1.1.0" />
+    <Compile Remove="wwwroot\**" />
+    <Content Remove="wwwroot\**" />
+    <EmbeddedResource Remove="wwwroot\**" />
+    <None Remove="wwwroot\**" />
+  </ItemGroup>
+
+  <ItemGroup>
     <PackageReference Include="GitHubJwt" Version="0.0.2" />
     <PackageReference Include="HangFire" Version="1.6.19" />
     <PackageReference Include="Hangfire.MySqlStorage" Version="1.1.1-beta" />
+    <PackageReference Include="MetadataExtractor" Version="2.0.0" />
     <PackageReference Include="Microsoft.AspNetCore.All" Version="2.0.8" />
     <PackageReference Include="Microsoft.CodeAnalysis.FxCopAnalyzers" Version="2.6.0" />
     <PackageReference Include="Microsoft.EntityFrameworkCore" Version="2.0.3" />
@@ -45,10 +52,6 @@
     <Reference Include="Octokit">
       <HintPath>Octokit.dll</HintPath>
     </Reference>
-  </ItemGroup>
-
-  <ItemGroup>
-    <Folder Include="wwwroot\" />
   </ItemGroup>
 
 </Project>

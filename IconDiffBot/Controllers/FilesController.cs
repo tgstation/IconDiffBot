@@ -1,5 +1,6 @@
 ﻿using IconDiffBot.Models;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
 using Octokit;
 using System;
@@ -38,7 +39,7 @@ namespace IconDiffBot.Controllers
 		/// <param name="fileId">The <see cref="IconDiff.FileId"/></param>
 		/// <param name="postfix">Either "before", "after" or "logs"</param>
 		/// <returns>A relative url to the appropriate <see cref="FilesController"/> action</returns>
-		public static string RouteTo(Repository repository, long checkRunId, int fileId, string postfix) => String.Format(CultureInfo.InvariantCulture, "/{5}/{0}/{1}/{2}/{3}.{4}", repository, checkRunId, fileId, postfix, postfix == "logs" ? "txt" : "png", Route);
+		public static string RouteTo(Repository repository, long checkRunId, int fileId, string postfix) => String.Format(CultureInfo.InvariantCulture, "/{5}/{0}/{1}/{2}/{3}.{4}", repository.Id, checkRunId, fileId, postfix, postfix == "logs" ? "txt" : "png", Route);
 
 		/// <summary>
 		/// Construct a <see cref="FilesController"/>
@@ -74,12 +75,15 @@ namespace IconDiffBot.Controllers
 			if (!before && beforeOrAfter != "AFTER")
 				return BadRequest();
 
-			var diff = await databaseContext.IconDiffs.Where(x => x.RepositoryId == repositoryId && x.CheckRunId == checkRunId && x.FileId == fileId).Select(x => before ? x.BeforeImage : x.AfterImage).ToAsyncEnumerable().FirstOrDefault(cancellationToken).ConfigureAwait(false);
+			var diff = await databaseContext.IconDiffs.Where(x => x.RepositoryId == repositoryId && x.CheckRunId == checkRunId && x.FileId == fileId).Select(x => before ? x.Before : x.After).Select(x => new Image
+			{
+				Data = x.Data
+			}).FirstOrDefaultAsync(cancellationToken).ConfigureAwait(false);
 
 			if (diff == null)
 				return NotFound();
 
-			return File(diff, "image/png");
+			return File(diff.Data, "image/png");
 		}
 	}
 }

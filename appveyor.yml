@@ -18,18 +18,21 @@ cache:
   - C:\ProgramData\chocolatey\bin -> appveyor.yml
   - C:\ProgramData\chocolatey\lib -> appveyor.yml
 install:
-  - choco install doxygen.portable codecov
+  - choco install doxygen.portable
+# Enable if tests are added
+#  - choco install codecov
 before_build:
   - nuget restore IconDiffBot.sln
 build:
   project: IconDiffBot.sln
   verbosity: minimal
-test_script:
-  - set path=%ProgramFiles(x86)%\Microsoft Visual Studio\2017\TestAgent\Common7\IDE\CommonExtensions\Microsoft\TestWindow;%path%
-  - copy "%ProgramFiles(x86)%\Microsoft Visual Studio\2017\Community\Common7\IDE\CommonExtensions\Microsoft\TestWindow\Extensions\appveyor.*" "%ProgramFiles(x86)%\Microsoft Visual Studio\2017\TestAgent\Common7\IDE\CommonExtensions\Microsoft\TestWindow\Extensions" /y
-  - vstest.console /EnableCodeCoverage "IconDiffBot.Tests\bin\%CONFIGURATION%\netcoreapp2.0\IconDiffBot.Tests.dll" /logger:trx;LogFileName=results.trx
-  - ps: $wc = New-Object 'System.Net.WebClient'
-  - ps: $wc.UploadFile("https://ci.appveyor.com/api/testresults/mstest/$($env:APPVEYOR_JOB_ID)", (Resolve-Path .\TestResults\results.trx))
+# Enable if tests are added
+#test_script:
+#  - set path=%ProgramFiles(x86)%\Microsoft Visual Studio\2017\TestAgent\Common7\IDE\CommonExtensions\Microsoft\TestWindow;%path%
+#  - copy "%ProgramFiles(x86)%\Microsoft Visual Studio\2017\Community\Common7\IDE\CommonExtensions\Microsoft\TestWindow\Extensions\appveyor.*" "%ProgramFiles(x86)%\Microsoft Visual Studio\2017\TestAgent\Common7\IDE\CommonExtensions\Microsoft\TestWindow\Extensions" /y
+#  - vstest.console /EnableCodeCoverage "IconDiffBot.Tests\bin\%CONFIGURATION%\netcoreapp2.0\IconDiffBot.Tests.dll" /logger:trx;LogFileName=results.trx
+#  - ps: $wc = New-Object 'System.Net.WebClient'
+#  - ps: $wc.UploadFile("https://ci.appveyor.com/api/testresults/mstest/$($env:APPVEYOR_JOB_ID)", (Resolve-Path .\TestResults\results.trx))
 after_test:
-  - ps: Tools/UploadCoverage.ps1
+#  - ps: Tools/UploadCoverage.ps1
   - ps: Tools/BuildDox.ps1

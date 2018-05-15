@@ -111,7 +111,7 @@ namespace IconDiffBot.Core
 		{
 			logger.LogTrace("Update check run {0} on repository {1}", checkRunId, repositoryId);
 			var client = await CreateInstallationClient(installationId, cancellationToken).ConfigureAwait(false);
-			await client.Checks.Runs.Update(repositoryId, checkRunId, checkRunUpdate).ConfigureAwait(false);
+			await client.Check.Run.Update(repositoryId, checkRunId, checkRunUpdate).ConfigureAwait(false);
 		}
 
 		/// <inheritdoc />
@@ -119,7 +119,7 @@ namespace IconDiffBot.Core
 		{
 			logger.LogTrace("Create check run for ref {0} on repository {1}", initializer.HeadSha, repositoryId);
 			var client = await CreateInstallationClient(installationId, cancellationToken).ConfigureAwait(false);
-			var checkRun = await client.Checks.Runs.Create(repositoryId, initializer).ConfigureAwait(false);
+			var checkRun = await client.Check.Run.Create(repositoryId, initializer).ConfigureAwait(false);
 			return checkRun.Id;
 		}
 
@@ -134,6 +134,12 @@ namespace IconDiffBot.Core
 			var client = await CreateInstallationClient(installationId, cancellationToken).ConfigureAwait(false);
 			var files = await client.Repository.Content.GetAllContentsByRef(repositoryId, filePath, commit).ConfigureAwait(false);
 			return Convert.FromBase64String(files[0].EncodedContent);
+		}
+
+		public async Task<IEnumerable<CheckRun>> GetMatchingCheckRuns(long repositoryId, long installationId, long checkSuiteId, CancellationToken cancellationToken)
+		{
+			var client = await CreateInstallationClient(installationId, cancellationToken).ConfigureAwait(false);
+			return await client.Check.Run.GetAllForCheckSuite(repositoryId, checkSuiteId).ConfigureAwait(false);
 		}
 	}
 }

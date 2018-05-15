@@ -1,4 +1,6 @@
-﻿namespace IconDiffBot.Configuration
+﻿using System;
+
+namespace IconDiffBot.Configuration
 {
 	/// <summary>
 	/// GitHub configuration settings
@@ -14,6 +16,11 @@
 		/// The secret to use for hashing webhook payloads
 		/// </summary>
 		public string WebhookSecret { get; set; }
+
+		/// <summary>
+		/// The URL that points to '/' on the <see cref="Core.Application"/>
+		/// </summary>
+		public Uri WebhookBaseUrl { get; set; }
 
 		/// <summary>
 		/// The GitHub App PEM private key file path

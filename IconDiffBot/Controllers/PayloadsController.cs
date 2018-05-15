@@ -155,6 +155,23 @@ namespace IconDiffBot.Controllers
 				}
 				logger.LogTrace("Queuing check suite payload processing job.");
 
+				pullRequestProcessor.ProcessPayload(payload);
+			}
+			else if (eventName == "check_run")
+			{
+				CheckRunEventPayload payload;
+				logger.LogTrace("Deserializing check run payload.");
+				try
+				{
+					payload = new SimpleJsonSerializer().Deserialize<CheckRunEventPayload>(json);
+				}
+				catch (Exception e)
+				{
+					logger.LogDebug(e, "Failed to deserialize check run payload JSON!");
+					return BadRequest(e);
+				}
+				logger.LogTrace("Queuing check run payload processing job.");
+
 				await pullRequestProcessor.ProcessPayload(payload, gitHubManager, cancellationToken).ConfigureAwait(false);
 			}
 
