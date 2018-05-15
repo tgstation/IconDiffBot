@@ -21,6 +21,10 @@ namespace IconDiffBot.Models
 		/// <inheritdoc />
 		public DbSet<IconDiff> IconDiffs { get; set; }
 
+
+		/// <inheritdoc />
+		public DbSet<IconState> IconStates { get; set; }
+
 		/// <summary>
 		/// The <see cref="DbSet{TEntity}"/> for <see cref="Log"/>s
 		/// </summary>
@@ -65,6 +69,9 @@ namespace IconDiffBot.Models
 
 			//enable map diff indexing
 			modelBuilder.Entity<IconDiff>().HasKey(x => new { x.RepositoryId, x.CheckRunId, x.FileId });
+
+			//unique image shas
+			modelBuilder.Entity<IconState>().HasIndex(x => x.Sha1).IsUnique();
 		}
 
 		/// <inheritdoc />

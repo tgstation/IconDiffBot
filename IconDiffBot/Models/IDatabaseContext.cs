@@ -14,10 +14,16 @@ namespace IconDiffBot.Models
 		/// The <see cref="Installation"/>s in the database
 		/// </summary>
 		DbSet<Installation> Installations { get; set; }
+
 		/// <summary>
 		/// The <see cref="IconDiff"/>s in the database
 		/// </summary>
 		DbSet<IconDiff> IconDiffs { get; set; }
+
+		/// <summary>
+		/// The <see cref="IconState"/>s in the database
+		/// </summary>
+		DbSet<IconState> IconStates { get; set; }
 
 		/// <summary>
 		/// Save changes to the <see cref="IDatabaseContext"/>

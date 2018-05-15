@@ -2,6 +2,7 @@
 using IconDiffBot.Configuration;
 using IconDiffBot.Controllers;
 using IconDiffBot.Models;
+using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Localization;
 using Microsoft.Extensions.Logging;
@@ -201,8 +202,9 @@ namespace IconDiffBot.Core
 					Output = new CheckRunOutput(stringLocalizer["Generating Diffs"], stringLocalizer["Aww geez rick, I should eventually put some progress message here"], null, null, null),
 				}, cancellationToken);
 
+				var databaseContext = scope.ServiceProvider.GetRequiredService<IDatabaseContext>();
 				var results = new List<IconDiff>();
-
+				int fileIdCounter = 0;
 				async Task DiffDmi(string path)
 				{
 					async Task<Bitmap> GetImageFor(string commit)
@@ -216,42 +218,81 @@ namespace IconDiffBot.Core
 					using (var before = await beforeTask.ConfigureAwait(false))
 					{
 						var diffs = await diffGenerator.GenerateDiffs(before, after, cancellationToken).ConfigureAwait(false);
-						lock (results) {
-							var baseCount = results.Count;
-							results.AddRange(diffs.Select(x =>
+						async Task<IconDiff> CheckDiffImages(IconDiff iconDiff)
+						{
+							IQueryable<IconState> query;
+
+							if (iconDiff.Before == null || iconDiff.After == null)
+								query = databaseContext.IconStates.Where(x => x.Sha1 == (iconDiff.Before == null ? iconDiff.After.Sha1 : iconDiff.Before.Sha1));
+							else
+								query = databaseContext.IconStates.Where(x => x.Sha1 == iconDiff.Before.Sha1 || x.Sha1 == iconDiff.After.Sha1);
+
+							var matchingImages = await query.Select(x => new IconState
 							{
-								x.CheckRunId = checkRunId;
-								x.DmiPath = path;
-								x.FileId = ++baseCount;
-								x.RepositoryId = pullRequest.Base.Repository.Id;
-								return x;
-							}));
-						}
+								Id = x.Id
+							}).ToListAsync(cancellationToken).ConfigureAwait(false);
+
+							var beforeQueryResult = matchingImages.FirstOrDefault(x => x.Sha1 == iconDiff.Before?.Sha1);
+							var afterQueryResult = matchingImages.FirstOrDefault(x => x.Sha1 == iconDiff.Before?.Sha1);
+							lock (databaseContext)
+							{
+								if (beforeQueryResult != default(IconState))
+								{
+									databaseContext.IconStates.Attach(beforeQueryResult);
+									iconDiff.Before = beforeQueryResult;
+								}
+								else if (iconDiff.Before != null)
+									databaseContext.IconStates.Add(iconDiff.Before);
+								if (afterQueryResult != default(IconState))
+								{
+									databaseContext.IconStates.Attach(afterQueryResult);
+									iconDiff.Before = afterQueryResult;
+								}
+								else if (iconDiff.Before != null)
+									databaseContext.IconStates.Add(iconDiff.Before);
+							}
+							return iconDiff;
+						};
+
+						var tasks = diffs.Select(x =>
+						{
+							x.CheckRunId = checkRunId;
+							x.DmiPath = path;
+							lock(results)
+								x.FileId = ++fileIdCounter;
+							x.RepositoryId = pullRequest.Base.Repository.Id;
+							return CheckDiffImages(x);
+						});
+
+						await Task.WhenAll(tasks).ConfigureAwait(false);
+
+						lock (results)
+							results.AddRange(tasks.Select(x => x.Result));
 					}
 				};
 
 				await Task.WhenAll(changedDmis.Select(x => DiffDmi(x))).ConfigureAwait(false);
 
 				await checkRunDequeueUpdate.ConfigureAwait(false);
-				await HandleResults(pullRequest, installationId, checkRunId, results, scope, cancellationToken).ConfigureAwait(false);
+				await HandleResults(pullRequest, installationId, checkRunId, results, scope, databaseContext, cancellationToken).ConfigureAwait(false);
 			}
 		}
 
 		/// <summary>
-		/// Publish a <see cref="List{T}"/> of <paramref name="diffResults"/>s to the <see cref="IDatabaseContext"/> and GitHub
+		/// Publish a <see cref="List{T}"/> of <paramref name="diffResults"/>s to the <paramref name="databaseContext"/> and GitHub
 		/// </summary>
 		/// <param name="pullRequest">The <see cref="PullRequest"/> the <paramref name="diffResults"/> are for</param>
 		/// <param name="installationId">The <see cref="InstallationId.Id"/></param>
 		/// <param name="checkRunId">The <see cref="CheckRun.Id"/></param>
 		/// <param name="diffResults">The <see cref="IconDiff"/>s</param>
 		/// <param name="scope">The <see cref="IServiceScope"/> for the operation</param>
+		/// <param name="databaseContext">The <see cref="IDatabaseContext"/> for the operation</param>
 		/// <param name="cancellationToken">The <see cref="CancellationToken"/> for the operation</param>
 		/// <returns>A <see cref="Task"/> representing the running operation</returns>
-		async Task HandleResults(PullRequest pullRequest, long installationId, long checkRunId, List<IconDiff> diffResults, IServiceScope scope, CancellationToken cancellationToken)
+		async Task HandleResults(PullRequest pullRequest, long installationId, long checkRunId, List<IconDiff> diffResults, IServiceScope scope, IDatabaseContext databaseContext, CancellationToken cancellationToken)
 		{
 			int formatterCount = 0;
-
-			var databaseContext = scope.ServiceProvider.GetRequiredService<IDatabaseContext>();
+			
 			logger.LogTrace("Generating check run output and preparing database query...");
 
 			var outputImages = new List<CheckRunImage>()
