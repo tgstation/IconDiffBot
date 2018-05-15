@@ -23,6 +23,11 @@ namespace IconDiffBot.Models
 		public bool Rewind { get; set; }
 
 		/// <summary>
+		/// Number of frames in the state
+		/// </summary>
+		public int Frames => FrameDelays.Count + 1;
+
+		/// <summary>
 		/// Delays between frames in the state
 		/// </summary>
 		public List<float> FrameDelays { get; } = new List<float>();
