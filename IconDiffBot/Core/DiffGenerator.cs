@@ -19,7 +19,8 @@ namespace IconDiffBot.Core
 			const string DmiHeader = "# BEGIN DMI";
 			var description = metadata.SelectMany(x => x.Tags).First(x => x.Description.Contains(DmiHeader)).Description;
 			var startIndex = description.IndexOf(DmiHeader, StringComparison.InvariantCulture) + DmiHeader.Length;
-			return description.Substring(startIndex);
+			var length = description.IndexOf("# END DMI", StringComparison.InvariantCulture) - startIndex;
+			return description.Substring(startIndex, length);
 		}
 
 		/// <inheritdoc />
