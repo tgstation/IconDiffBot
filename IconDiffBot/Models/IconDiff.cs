@@ -36,7 +36,7 @@ namespace IconDiffBot.Models
 		public string DmiPath { get; set; }
 
 		/// <summary>
-		/// The <see cref="Before"/> <see cref="Image.Id"/>
+		/// The <see cref="Before"/> <see cref="IconState.Id"/>
 		/// </summary>
 		public long BeforeId { get; set; }
 

@@ -1,5 +1,6 @@
 ﻿using IconDiffBot.Models;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
 using Octokit;
 using System;
@@ -74,12 +75,15 @@ namespace IconDiffBot.Controllers
 			if (!before && beforeOrAfter != "AFTER")
 				return BadRequest();
 
-			var diff = await databaseContext.IconDiffs.Where(x => x.RepositoryId == repositoryId && x.CheckRunId == checkRunId && x.FileId == fileId).Select(x => before ? x.BeforeImage : x.AfterImage).ToAsyncEnumerable().FirstOrDefault(cancellationToken).ConfigureAwait(false);
+			var diff = await databaseContext.IconDiffs.Where(x => x.RepositoryId == repositoryId && x.CheckRunId == checkRunId && x.FileId == fileId).Select(x => before ? x.Before : x.After).Select(x => new IconState
+			{
+				Data = x.Data
+			}).FirstOrDefaultAsync(cancellationToken).ConfigureAwait(false);
 
 			if (diff == null)
 				return NotFound();
 
-			return File(diff, "image/png");
+			return File(diff.Data, "image/png");
 		}
 	}
 }

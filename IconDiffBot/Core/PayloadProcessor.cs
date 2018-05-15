@@ -61,7 +61,6 @@ namespace IconDiffBot.Core
 		/// </summary>
 		/// <param name="generalConfigurationOptions">The <see cref="IOptions{TOptions}"/> containing the value of <see cref="generalConfiguration"/></param>
 		/// <param name="serviceProvider">The value of <see cref="serviceProvider"/></param>
-		/// <param name="ioManager">The value of <see cref="ioManager"/></param>
 		/// <param name="logger">The value of <see cref="logger"/></param>
 		/// <param name="stringLocalizer">The value of <see cref="stringLocalizer"/></param>
 		/// <param name="backgroundJobClient">The value of <see cref="backgroundJobClient"/></param>
