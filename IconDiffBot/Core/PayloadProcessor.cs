@@ -215,7 +215,7 @@ namespace IconDiffBot.Core
 					using (var after = await GetImageFor(pullRequest.Head.Sha).ConfigureAwait(false))
 					using (var before = await beforeTask.ConfigureAwait(false))
 					{
-						var diffs = await diffGenerator.GenerateDiffs(before, after, cancellationToken).ConfigureAwait(false);
+						var diffs = diffGenerator.GenerateDiffs(before, after);
 						async Task<IconDiff> CheckDiffImages(IconDiff iconDiff)
 						{
 							IQueryable<Models.Image> query;
