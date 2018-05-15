@@ -29,23 +29,15 @@ namespace IconDiffBot.Core
 		/// The URL to direct user to report issues at
 		/// </summary>
 		const string IssueReportUrl = "https://github.com/tgstation/IconDiffBot/issues";
+		
 		/// <summary>
-		/// The intermediate directory for operations
+		/// The <see cref="GeneralConfiguration"/> for the <see cref="PayloadProcessor"/>
 		/// </summary>
-		public const string WorkingDirectory = "MapDiffs";
-
+		readonly GeneralConfiguration generalConfiguration;
 		/// <summary>
-		/// The <see cref="GitHubConfiguration"/> for the <see cref="PayloadProcessor"/>
-		/// </summary>
-		readonly GitHubConfiguration gitHubConfiguration;
-		/// <summary>
-		/// The <see cref="IGitHubManager"/> for the <see cref="PayloadProcessor"/>
+		/// The <see cref="IServiceProvider"/> for the <see cref="PayloadProcessor"/>
 		/// </summary>
 		readonly IServiceProvider serviceProvider;
-		/// <summary>
-		/// The <see cref="IIOManager"/> for the <see cref="PayloadProcessor"/>
-		/// </summary>
-		readonly IIOManager ioManager;
 		/// <summary>
 		/// The <see cref="ILogger"/> for the <see cref="PayloadProcessor"/>
 		/// </summary>
@@ -66,17 +58,16 @@ namespace IconDiffBot.Core
 		/// <summary>
 		/// Construct a <see cref="PayloadProcessor"/>
 		/// </summary>
-		/// <param name="gitHubConfigurationOptions">The <see cref="IOptions{TOptions}"/> containing the value of <see cref="gitHubConfiguration"/></param>
+		/// <param name="generalConfigurationOptions">The <see cref="IOptions{TOptions}"/> containing the value of <see cref="generalConfiguration"/></param>
 		/// <param name="serviceProvider">The value of <see cref="serviceProvider"/></param>
 		/// <param name="ioManager">The value of <see cref="ioManager"/></param>
 		/// <param name="logger">The value of <see cref="logger"/></param>
 		/// <param name="stringLocalizer">The value of <see cref="stringLocalizer"/></param>
 		/// <param name="backgroundJobClient">The value of <see cref="backgroundJobClient"/></param>
 		/// <param name="diffGenerator">The value of <see cref="diffGenerator"/></param>
-		public PayloadProcessor(IOptions<GitHubConfiguration> gitHubConfigurationOptions, IServiceProvider serviceProvider, IIOManager ioManager, ILogger<PayloadProcessor> logger, IStringLocalizer<PayloadProcessor> stringLocalizer, IBackgroundJobClient backgroundJobClient, IDiffGenerator diffGenerator)
+		public PayloadProcessor(IOptions<GeneralConfiguration> generalConfigurationOptions, IServiceProvider serviceProvider, ILogger<PayloadProcessor> logger, IStringLocalizer<PayloadProcessor> stringLocalizer, IBackgroundJobClient backgroundJobClient, IDiffGenerator diffGenerator)
 		{
-			gitHubConfiguration = gitHubConfigurationOptions?.Value ?? throw new ArgumentNullException(nameof(gitHubConfigurationOptions));
-			this.ioManager = new ResolvingIOManager(ioManager ?? throw new ArgumentNullException(nameof(ioManager)), WorkingDirectory);
+			generalConfiguration = generalConfigurationOptions?.Value ?? throw new ArgumentNullException(nameof(generalConfigurationOptions));
 			this.serviceProvider = serviceProvider ?? throw new ArgumentNullException(nameof(serviceProvider));
 			this.logger = logger ?? throw new ArgumentNullException(nameof(logger));
 			this.stringLocalizer = stringLocalizer ?? throw new ArgumentNullException(nameof(stringLocalizer));
@@ -190,71 +181,6 @@ namespace IconDiffBot.Core
 		}
 
 		/// <summary>
-		/// Checks a <see cref="CheckSuite"/> for existing <see cref="CheckRun"/>s and calls <see cref="ScanPullRequest(long, int, long, IJobCancellationToken)"/> as necessary
-		/// </summary>
-		/// <param name="repositoryId">The <see cref="PullRequest.Base"/> <see cref="Repository.Id"/></param>
-		/// <param name="installationId">The <see cref="InstallationId.Id"/></param>
-		/// <param name="checkSuiteId">The <see cref="CheckSuite.Id"/></param>
-		/// <param name="checkSuiteSha">The <see cref="CheckSuite.HeadSha"/></param>
-		/// <param name="jobCancellationToken">The <see cref="IJobCancellationToken"/> for the operation</param>
-		/// <returns>A <see cref="Task"/> representing the running operation</returns>
-		[AutomaticRetry(Attempts = 0)]
-		public async Task ScanCheckSuite(long repositoryId, long installationId, long checkSuiteId, string checkSuiteSha, IJobCancellationToken jobCancellationToken)
-		{
-			using (logger.BeginScope("Scanning check suite {0} for repository {1}. Sha: ", checkSuiteId, repositoryId, checkSuiteSha))
-			using (var scope = serviceProvider.CreateScope())
-			{
-				var gitHubManager = scope.ServiceProvider.GetRequiredService<IGitHubManager>();
-				var cancellationToken = jobCancellationToken.ShutdownToken;
-				var checkRuns = await gitHubManager.GetMatchingCheckRuns(repositoryId, installationId, checkSuiteId, cancellationToken).ConfigureAwait(false);
-				bool testedAny = false;
-
-				await Task.WhenAll(checkRuns.Select(x =>
-				{
-					var result = GetPullRequestNumberFromCheckRun(x);
-					if (result.HasValue)
-					{
-						testedAny = true;
-						return ScanPullRequestImpl(repositoryId, result.Value, installationId, scope, cancellationToken);
-					}
-					return Task.CompletedTask;
-				})).ConfigureAwait(false);
-
-				if (!testedAny)
-				{
-					var now = DateTimeOffset.Now;
-					var nmc = stringLocalizer["No Known Associated Pull Request"];
-					await gitHubManager.CreateCheckRun(repositoryId, installationId, new NewCheckRun
-					{
-						CompletedAt = now,
-						StartedAt = now,
-						Conclusion = CheckConclusion.Neutral,
-						HeadSha = checkSuiteSha,
-						Name = nmc,
-						Output = new CheckRunOutput(nmc, stringLocalizer["No pull requests could be associated with this check suite"], null, null, null),
-						Status = CheckStatus.Completed
-					}, cancellationToken).ConfigureAwait(false);
-				}
-			}
-		}
-
-		/// <summary>
-		/// Generates a icon diff for the specified <see cref="PullRequest"/>
-		/// </summary>
-		/// <param name="repositoryId">The <see cref="PullRequest.Base"/> <see cref="Repository.Id"/></param>
-		/// <param name="pullRequestNumber">The <see cref="PullRequest.Number"/></param>
-		/// <param name="installationId">The <see cref="InstallationId.Id"/></param>
-		/// <param name="jobCancellationToken">The <see cref="IJobCancellationToken"/> for the operation</param>
-		/// <returns>A <see cref="Task"/> representing the running operation</returns>
-		[AutomaticRetry(Attempts = 0)]
-		public async Task ScanPullRequest(long repositoryId, int pullRequestNumber, long installationId, IJobCancellationToken jobCancellationToken)
-		{
-			using (logger.BeginScope("Scanning pull request #{0} for repository {1}", pullRequestNumber, repositoryId))
-			using (var scope = serviceProvider.CreateScope())
-				await ScanPullRequestImpl(repositoryId, pullRequestNumber, installationId, scope, jobCancellationToken.ShutdownToken).ConfigureAwait(false);
-		}
-
-		/// <summary>
 		/// Generate map diffs for a given <paramref name="pullRequest"/>
 		/// </summary>
 		/// <param name="pullRequest">The <see cref="PullRequest"/></param>
@@ -333,7 +259,7 @@ namespace IconDiffBot.Core
 				Capacity = diffResults.Count
 			};
 
-			var prefix = gitHubConfiguration.WebhookBaseUrl.ToString();
+			var prefix = generalConfiguration.ApplicationPrefix;
 
 			foreach (var kv in diffResults)
 			{
@@ -359,6 +285,83 @@ namespace IconDiffBot.Core
 				Conclusion = CheckConclusion.Success
 			};
 			await scope.ServiceProvider.GetRequiredService<IGitHubManager>().UpdateCheckRun(pullRequest.Base.Repository.Id, installationId, checkRunId, ncr, cancellationToken).ConfigureAwait(false);
+		}
+
+		/// <summary>
+		/// Creates a <see cref="CheckRun"/> for a <paramref name="checkSuiteSha"/> saying no pull requests could be associated with it
+		/// </summary>
+		/// <param name="repositoryId">The <see cref="Repository.Id"/></param>
+		/// <param name="installationId">The <see cref="InstallationId.Id"/></param>
+		/// <param name="gitHubManager">The <see cref="IGitHubManager"/> for the operation</param>
+		/// <param name="checkSuiteSha">The <see cref="CheckSuite.HeadSha"/></param>
+		/// <param name="cancellationToken">The <see cref="CancellationToken"/> for the operation</param>
+		/// <returns>A <see cref="Task"/> representing the running operation</returns>
+		async Task CreateUnassociatedCheck(long repositoryId, long installationId, IGitHubManager gitHubManager, string checkSuiteSha, CancellationToken cancellationToken)
+		{
+			var now = DateTimeOffset.Now;
+			var nmc = stringLocalizer["No Associated Pull Request"];
+			await gitHubManager.CreateCheckRun(repositoryId, installationId, new NewCheckRun
+			{
+				CompletedAt = now,
+				StartedAt = now,
+				Conclusion = CheckConclusion.Neutral,
+				HeadSha = checkSuiteSha,
+				Name = nmc,
+				Output = new CheckRunOutput(nmc, String.Empty, null, null, null),
+				Status = CheckStatus.Completed
+			}, cancellationToken).ConfigureAwait(false);
+		}
+
+		/// <summary>
+		/// Checks a <see cref="CheckSuite"/> for existing <see cref="CheckRun"/>s and calls <see cref="ScanPullRequest(long, int, long, IJobCancellationToken)"/> as necessary
+		/// </summary>
+		/// <param name="repositoryId">The <see cref="PullRequest.Base"/> <see cref="Repository.Id"/></param>
+		/// <param name="installationId">The <see cref="InstallationId.Id"/></param>
+		/// <param name="checkSuiteId">The <see cref="CheckSuite.Id"/></param>
+		/// <param name="checkSuiteSha">The <see cref="CheckSuite.HeadSha"/></param>
+		/// <param name="jobCancellationToken">The <see cref="IJobCancellationToken"/> for the operation</param>
+		/// <returns>A <see cref="Task"/> representing the running operation</returns>
+		[AutomaticRetry(Attempts = 0)]
+		public async Task ScanCheckSuite(long repositoryId, long installationId, long checkSuiteId, string checkSuiteSha, IJobCancellationToken jobCancellationToken)
+		{
+			using (logger.BeginScope("Scanning check suite {0} for repository {1}. Sha: ", checkSuiteId, repositoryId, checkSuiteSha))
+			using (var scope = serviceProvider.CreateScope())
+			{
+				var gitHubManager = scope.ServiceProvider.GetRequiredService<IGitHubManager>();
+				var cancellationToken = jobCancellationToken.ShutdownToken;
+				var checkRuns = await gitHubManager.GetMatchingCheckRuns(repositoryId, installationId, checkSuiteId, cancellationToken).ConfigureAwait(false);
+				bool testedAny = false;
+
+				await Task.WhenAll(checkRuns.Select(x =>
+				{
+					var result = GetPullRequestNumberFromCheckRun(x);
+					if (result.HasValue)
+					{
+						testedAny = true;
+						return ScanPullRequestImpl(repositoryId, result.Value, installationId, scope, cancellationToken);
+					}
+					return Task.CompletedTask;
+				})).ConfigureAwait(false);
+
+				if (!testedAny)
+					await CreateUnassociatedCheck(repositoryId, installationId, gitHubManager, checkSuiteSha, cancellationToken).ConfigureAwait(false);
+			}
+		}
+
+		/// <summary>
+		/// Generates a icon diff for the specified <see cref="PullRequest"/>
+		/// </summary>
+		/// <param name="repositoryId">The <see cref="PullRequest.Base"/> <see cref="Repository.Id"/></param>
+		/// <param name="pullRequestNumber">The <see cref="PullRequest.Number"/></param>
+		/// <param name="installationId">The <see cref="InstallationId.Id"/></param>
+		/// <param name="jobCancellationToken">The <see cref="IJobCancellationToken"/> for the operation</param>
+		/// <returns>A <see cref="Task"/> representing the running operation</returns>
+		[AutomaticRetry(Attempts = 0)]
+		public async Task ScanPullRequest(long repositoryId, int pullRequestNumber, long installationId, IJobCancellationToken jobCancellationToken)
+		{
+			using (logger.BeginScope("Scanning pull request #{0} for repository {1}", pullRequestNumber, repositoryId))
+			using (var scope = serviceProvider.CreateScope())
+				await ScanPullRequestImpl(repositoryId, pullRequestNumber, installationId, scope, jobCancellationToken.ShutdownToken).ConfigureAwait(false);
 		}
 
 		/// <inheritdoc />
@@ -389,24 +392,10 @@ namespace IconDiffBot.Core
 			if (payload.Action != "rerequested")
 				return;
 			var prNumber = GetPullRequestNumberFromCheckRun(payload.CheckRun);
-			if(prNumber.HasValue)
+			if (prNumber.HasValue)
 				backgroundJobClient.Enqueue(() => ScanPullRequest(payload.Repository.Id, prNumber.Value, payload.Installation.Id, JobCancellationToken.Null));
 			else
-			{
-				var now = DateTimeOffset.Now;
-				var nmc = stringLocalizer["No Associated Pull Request"];
-				await gitHubManager.CreateCheckRun(payload.Repository.Id, payload.Installation.Id, new NewCheckRun
-				{
-					CompletedAt = now,
-					StartedAt = now,
-					Conclusion = CheckConclusion.Neutral,
-					HeadBranch = payload.CheckRun.CheckSuite.HeadBranch,
-					HeadSha = payload.CheckRun.CheckSuite.HeadSha,
-					Name = nmc,
-					Output = new CheckRunOutput(nmc, String.Empty, null, null, null),
-					Status = CheckStatus.Completed
-				}, cancellationToken).ConfigureAwait(false);
-			}
+				await CreateUnassociatedCheck(payload.Repository.Id, payload.Installation.Id, gitHubManager, payload.CheckRun.CheckSuite.HeadSha, cancellationToken).ConfigureAwait(false);
 		}
 	}
 }

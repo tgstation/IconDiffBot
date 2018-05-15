@@ -1,5 +1,4 @@
-﻿using Cyberboss.AspNetCore.AsyncInitializer;
-using Hangfire;
+﻿using Hangfire;
 using Hangfire.Dashboard;
 using Hangfire.MySql;
 using Hangfire.SqlServer;
@@ -43,9 +42,9 @@ namespace IconDiffBot.Core
 			if (services == null)
 				throw new ArgumentNullException(nameof(services));
 
-
 			services.Configure<IISOptions>((options) => options.ForwardClientCertificate = false);
 			services.Configure<GitHubConfiguration>(configuration.GetSection(GitHubConfiguration.Section));
+			services.Configure<GeneralConfiguration>(configuration.GetSection(GeneralConfiguration.Section));
 			var dbConfigSection = configuration.GetSection(DatabaseConfiguration.Section);
 			services.Configure<DatabaseConfiguration>(dbConfigSection);
 
@@ -68,8 +67,7 @@ namespace IconDiffBot.Core
 			services.AddScoped<IGitHubClientFactory, GitHubClientFactory>();
 			services.AddScoped<IGitHubManager, GitHubManager>();
 			services.AddScoped<IWebRequestManager, WebRequestManager>();
-			
-			services.AddSingleton<IIOManager>(new ResolvingIOManager(new DefaultIOManager(), "App_Data"));
+
 			services.AddSingleton<IWebRequestManager, WebRequestManager>();
 			services.AddSingleton<IPayloadProcessor, PayloadProcessor>();
 		}
@@ -97,8 +95,7 @@ namespace IconDiffBot.Core
 
 			//prevent telemetry from polluting the debug log
 			TelemetryConfiguration.Active.DisableTelemetry = true;
-
-			applicationBuilder.UseAsyncInitialization<IIOManager>((ioManager, cancellationToken) => ioManager.DeleteDirectory(PayloadProcessor.WorkingDirectory, cancellationToken));
+			
 			databaseContext.Initialize(applicationLifetime.ApplicationStopping).GetAwaiter().GetResult();
 
 			loggerFactory.AddEntityFramework<DatabaseContext>(applicationBuilder.ApplicationServices);
