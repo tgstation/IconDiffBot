@@ -120,9 +120,7 @@ namespace IconDiffBot.Core
 				SupportedCultures = supportedCultures,
 				SupportedUICultures = supportedCultures,
 			});
-
-			applicationBuilder.UseStaticFiles();
-
+			
 			applicationBuilder.UseHangfireServer();
 
 			if (hostingEnvironment.IsDevelopment())
