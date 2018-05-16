@@ -406,7 +406,7 @@ namespace IconDiffBot.Core
 		/// <inheritdoc />
 		public void ProcessPayload(PullRequestEventPayload payload)
 		{
-			if ((payload.Action != "opened" && payload.Action != "synchronize") || payload.PullRequest.State.Value != ItemState.Open || payload.PullRequest.Base.Repository.Id == payload.PullRequest.Head.Repository.Id)
+			if ((payload.Action != "opened" && payload.Action != "synchronize") || payload.PullRequest.State.Value != ItemState.Open)
 				return;
 			backgroundJobClient.Enqueue(() => ScanPullRequest(payload.Repository.Id, payload.PullRequest.Number, payload.Installation.Id, JobCancellationToken.Null));
 		}
@@ -414,15 +414,11 @@ namespace IconDiffBot.Core
 		/// <inheritdoc />
 		public void ProcessPayload(CheckSuiteEventPayload payload)
 		{
-			if (payload.Action != "requested" && payload.Action != "rerequested")
+			if (payload.Action != "rerequested")
 				return;
 
 			//don't rely on CheckSuite.PullRequests, it doesn't include PRs from forks.
 			backgroundJobClient.Enqueue(() => ScanCheckSuite(payload.Repository.Id, payload.Installation.Id, payload.CheckSuite.Id, payload.CheckSuite.HeadSha, JobCancellationToken.Null));
-
-			if (payload.CheckSuite.PullRequests.Any())
-				foreach (var I in payload.CheckSuite.PullRequests)
-					backgroundJobClient.Enqueue(() => ScanPullRequest(payload.Repository.Id, I.Number, payload.Installation.Id, JobCancellationToken.Null));
 		}        
 
 		/// <inheritdoc />
