@@ -163,7 +163,7 @@ namespace IconDiffBot.Core
 						CompletedAt = DateTimeOffset.Now,
 						Status = CheckStatus.Completed,
 						Conclusion = CheckConclusion.Failure,
-						Output = new CheckRunOutput(stringLocalizer["Error rendering maps!"], stringLocalizer["Exception details:\n\n```\n{0}\n```\n\nPlease report this [here]({1})", e.ToString(), IssueReportUrl], null, null, null)
+						Output = new CheckRunOutput(stringLocalizer["Error generating diffs!"], stringLocalizer["Exception details:\n\n```\n{0}\n```\n\nPlease report this [here]({1})", e.ToString(), IssueReportUrl], null, null, null)
 					}, default).ConfigureAwait(false);
 					throw;
 				}
