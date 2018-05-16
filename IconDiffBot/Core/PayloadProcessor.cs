@@ -111,7 +111,7 @@ namespace IconDiffBot.Core
 			var ncr = new NewCheckRun
 			{
 				HeadSha = pullRequest.Head.Sha,
-				Name = String.Format(CultureInfo.InvariantCulture, "Renderings - Pull Request #{0}", pullRequest.Number),
+				Name = String.Format(CultureInfo.InvariantCulture, "Diffs - Pull Request #{0}", pullRequest.Number),
 				StartedAt = DateTimeOffset.Now,
 				Status = CheckStatus.Queued
 			};
