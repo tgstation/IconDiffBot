@@ -41,21 +41,10 @@ namespace IconDiffBot.Models
 		[Required]
 		public string StateName { get; set; }
 
-
-		/// <summary>
-		/// The <see cref="Before"/> <see cref="Image.Id"/>
-		/// </summary>
-		public long BeforeId { get; set; }
-
 		/// <summary>
 		/// The before <see cref="Image"/>
 		/// </summary>
 		public Image Before { get; set; }
-
-		/// <summary>
-		/// The <see cref="After"/> <see cref="Image.Id"/>
-		/// </summary>
-		public long AfterId { get; set; }
 
 		/// <summary>
 		/// The after <see cref="Image"/>
