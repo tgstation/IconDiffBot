@@ -38,7 +38,7 @@ namespace IconDiffBot.Controllers
 		/// <param name="checkRunId">The <see cref="CheckRun.Id"/></param>
 		/// <param name="fileId">The <see cref="IconDiff.FileId"/></param>
 		/// <param name="before"><see langword="true"/> for "before", "after" otherwise</param>
-		/// <returns>A relative url to the appropriate <see cref="FilesController"/> action</reaturns>
+		/// <returns>A relative url to the appropriate <see cref="FilesController"/> action</returns>
 		public static string RouteTo(Repository repository, long checkRunId, int fileId, bool before) => String.Format(CultureInfo.InvariantCulture, "/{4}/{0}/{1}/{2}/{3}.png", repository.Id, checkRunId, fileId, before ? "before" : "after", Route);
 
 		/// <summary>
