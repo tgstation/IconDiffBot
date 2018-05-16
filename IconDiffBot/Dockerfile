@@ -1,21 +1,22 @@
 FROM microsoft/aspnetcore-build AS build
 
-WORKDIR /src
-COPY IconDiffBot/* IconDiffBot/
-
 WORKDIR /src/IconDiffBot
+COPY IconDiffBot/IconDiffBot.csproj .
 RUN dotnet restore
+
+COPY IconDiffBot/* ./
 RUN dotnet build -c Docker
 
-WORKDIR /src/IconDiffBot
 RUN dotnet publish -c Docker -o /app && cp entrypoint.sh /app/
 
 FROM microsoft/aspnetcore AS base
 
+EXPOSE 80
+
 #deps for System.Drawing
 RUN apt-get update && apt-get install -y --no-install-recommends \
-	libc6 \
-	&& rm -rf /var/lib/apt/lists/*
+	libgdiplus \
+	&& rm -rf /var/lib/apt/lists/* && ln -s /lib/x86_64-linux-gnu/libdl.so.2 /lib/x86_64-linux-gnu/libdl.so
 
 WORKDIR /app
 COPY --from=build /app .
@@ -23,5 +24,4 @@ COPY --from=build /app .
 RUN mkdir /config_data && mv appsettings.Docker.json /config_data/appsettings.Production.json
 VOLUME ["/config_data"]
 
-EXPOSE 80
-ENTRYPOINT ["./entrypoint.sh"]
+CMD ["./entrypoint.sh"]
