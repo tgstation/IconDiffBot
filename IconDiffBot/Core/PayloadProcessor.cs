@@ -12,6 +12,7 @@ using System;
 using System.Collections.Generic;
 using System.Globalization;
 using System.Linq;
+using System.Text;
 using System.Text.RegularExpressions;
 using System.Threading;
 using System.Threading.Tasks;
@@ -163,7 +164,7 @@ namespace IconDiffBot.Core
 						CompletedAt = DateTimeOffset.Now,
 						Status = CheckStatus.Completed,
 						Conclusion = CheckConclusion.Failure,
-						Output = new CheckRunOutput(stringLocalizer["Error rendering maps!"], stringLocalizer["Exception details:\n\n```\n{0}\n```\n\nPlease report this [here]({1})", e.ToString(), IssueReportUrl], null, null, null)
+						Output = new CheckRunOutput(stringLocalizer["Error generating diffs!"], stringLocalizer["Exception details:\n\n```\n{0}\n```\n\nPlease report this [here]({1})", e.ToString(), IssueReportUrl], null, null, null)
 					}, default).ConfigureAwait(false);
 					throw;
 				}
@@ -299,19 +300,60 @@ namespace IconDiffBot.Core
 			};
 
 			var prefix = generalConfiguration.ApplicationPrefix;
+			var commentBuilder = new StringBuilder();
 
-			foreach (var kv in diffResults)
+			//create a dic of filepath -> IconDiff
+			var dic = new Dictionary<string, List<IconDiff>>();
+			foreach (var I in diffResults)
 			{
-				var beforeUrl = String.Concat(prefix, FilesController.RouteTo(pullRequest.Base.Repository, checkRunId, formatterCount, "before"));
-				var afterUrl = String.Concat(prefix, FilesController.RouteTo(pullRequest.Base.Repository, checkRunId, formatterCount, "after"));
-
-				logger.LogTrace("Adding IconDiff for {0}...", kv.DmiPath);
-				outputImages.Add(new CheckRunImage(null, beforeUrl, stringLocalizer["Old - {0}", kv.DmiPath]));
-				outputImages.Add(new CheckRunImage(null, afterUrl, stringLocalizer["New - {0}", kv.DmiPath]));
-				databaseContext.IconDiffs.Add(kv);
-				++formatterCount;
+				if (!dic.TryGetValue(I.DmiPath, out List<IconDiff> list))
+				{
+					list = new List<IconDiff>();
+					dic.Add(I.DmiPath, list);
+				}
+				list.Add(I);
+				databaseContext.IconDiffs.Add(I);
 			}
-			
+
+			foreach (var kv in dic)
+			{
+
+				commentBuilder.Append(String.Format(CultureInfo.InvariantCulture,
+					"<details><summary>{0}</summary>{5}{5}{1} | {2} | {3} | {4}{5}--- | --- | --- | ---",
+					kv.Key,
+					stringLocalizer["State"],
+					stringLocalizer["Old"],
+					stringLocalizer["New"],
+					stringLocalizer["Status"],
+					Environment.NewLine));
+				
+				foreach(var I in kv.Value)
+				{
+					var beforeUrl = String.Concat(prefix, FilesController.RouteTo(pullRequest.Base.Repository, checkRunId, formatterCount, true));
+					var afterUrl = String.Concat(prefix, FilesController.RouteTo(pullRequest.Base.Repository, checkRunId, formatterCount, false));
+
+					commentBuilder.Append(String.Format(CultureInfo.InvariantCulture,
+						"{0}{1} | ![]({2}) | ![]({3}) | {4}",
+						Environment.NewLine,
+						I.StateName,
+						beforeUrl,
+						afterUrl,
+						stringLocalizer[I.Before == null ? "Created" : I.After == null ? "Deleted" : "Modified"]
+						));
+
+					++formatterCount;
+				}
+
+				commentBuilder.Append(String.Format(CultureInfo.InvariantCulture, "{0}{0}</details>{0}{0}", Environment.NewLine));
+			}
+
+			var comment = String.Format(CultureInfo.CurrentCulture,
+				"{0}{1}{1}{1}{1}<br>{1}{1}{2}",
+				commentBuilder,
+				Environment.NewLine,
+				stringLocalizer["Please report any issues [here]({0}).", IssueReportUrl]
+			);
+
 			logger.LogTrace("Committing new IconDiffs to the database...");
 			await databaseContext.Save(cancellationToken).ConfigureAwait(false);
 			logger.LogTrace("Finalizing GitHub Check...");
@@ -320,7 +362,7 @@ namespace IconDiffBot.Core
 			{
 				Status = CheckStatus.Completed,
 				CompletedAt = DateTimeOffset.Now,
-				Output = new CheckRunOutput(stringLocalizer["Icon Diffs"], String.Empty, null, null, outputImages),
+				Output = new CheckRunOutput(stringLocalizer["Icon Diffs"], stringLocalizer["Icons with diff:"], comment, null, outputImages),
 				Conclusion = CheckConclusion.Success
 			};
 			await scope.ServiceProvider.GetRequiredService<IGitHubManager>().UpdateCheckRun(pullRequest.Base.Repository.Id, installationId, checkRunId, ncr, cancellationToken).ConfigureAwait(false);

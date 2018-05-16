@@ -80,9 +80,12 @@ namespace IconDiffBot.Core
 						inHeader = false;
 						currentState = new IconState
 						{
-							Name = value
+							Name = value.Substring(1, value.Length - 2)
 						};
 						dmi.IconStates.Add(currentState);
+						break;
+					case "hotspot":
+						EnsureHeader(false);
 						break;
 					case "dirs":
 						EnsureHeader(false);
@@ -202,6 +205,15 @@ namespace IconDiffBot.Core
 							final = olderOne;
 						else
 							bySha.Add(final.Sha1, final);
+
+						if (results.ContainsKey(name))
+						{
+							var baseName = name;
+							int counter = 1;
+							do
+								name = String.Format(CultureInfo.InvariantCulture, "{0}-{1}", baseName, ++counter);
+							while (results.ContainsKey(name));
+						}
 
 						results.Add(name, final);
 					}

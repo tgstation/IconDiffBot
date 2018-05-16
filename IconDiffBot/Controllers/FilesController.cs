@@ -37,9 +37,9 @@ namespace IconDiffBot.Controllers
 		/// <param name="repository">The <see cref="Repository"/></param>
 		/// <param name="checkRunId">The <see cref="CheckRun.Id"/></param>
 		/// <param name="fileId">The <see cref="IconDiff.FileId"/></param>
-		/// <param name="postfix">Either "before", "after" or "logs"</param>
+		/// <param name="before"><see langword="true"/> for "before", "after" otherwise</param>
 		/// <returns>A relative url to the appropriate <see cref="FilesController"/> action</returns>
-		public static string RouteTo(Repository repository, long checkRunId, int fileId, string postfix) => String.Format(CultureInfo.InvariantCulture, "/{5}/{0}/{1}/{2}/{3}.{4}", repository.Id, checkRunId, fileId, postfix, postfix == "logs" ? "txt" : "png", Route);
+		public static string RouteTo(Repository repository, long checkRunId, int fileId, bool before) => String.Format(CultureInfo.InvariantCulture, "/{4}/{0}/{1}/{2}/{3}.png", repository.Id, checkRunId, fileId, before ? "before" : "after", Route);
 
 		/// <summary>
 		/// Construct a <see cref="FilesController"/>
@@ -75,15 +75,12 @@ namespace IconDiffBot.Controllers
 			if (!before && beforeOrAfter != "AFTER")
 				return BadRequest();
 
-			var diff = await databaseContext.IconDiffs.Where(x => x.RepositoryId == repositoryId && x.CheckRunId == checkRunId && x.FileId == fileId).Select(x => before ? x.Before : x.After).Select(x => new Image
-			{
-				Data = x.Data
-			}).FirstOrDefaultAsync(cancellationToken).ConfigureAwait(false);
+			var diff = await databaseContext.IconDiffs.Where(x => x.RepositoryId == repositoryId && x.CheckRunId == checkRunId && x.FileId == fileId).Select(x => before ? x.Before : x.After).Select(x => x.Data).FirstOrDefaultAsync(cancellationToken).ConfigureAwait(false);
 
 			if (diff == null)
 				return NotFound();
 
-			return File(diff.Data, "image/png");
+			return File(diff, "image/png");
 		}
 	}
 }
