@@ -94,7 +94,8 @@ namespace IconDiffBot.Core
 						break;
 					case "frames":
 						EnsureHeader(false);
-						currentState.FrameDelays.Capacity = IntValue();
+						currentState.Frames = IntValue();
+						currentState.FrameDelays.Capacity = currentState.Frames - 1;
 						break;
 					case "delay":
 						EnsureHeader(false);
@@ -127,7 +128,7 @@ namespace IconDiffBot.Core
 				var hash = sha1.ComputeHash(input);
 				var sb = new StringBuilder(hash.Length * 2);
 
-				foreach (byte b in hash)
+				foreach (var b in hash)
 					sb.Append(b.ToString("x2", CultureInfo.InvariantCulture));
 
 				return sb.ToString();
@@ -140,21 +141,23 @@ namespace IconDiffBot.Core
 		/// <param name="dmi">The <see cref="Dmi"/></param>
 		/// <param name="stream">The <see cref="Stream"/> containing the <see cref="Dmi"/> data</param>
 		/// <returns>A <see cref="Dictionary{TKey, TValue}"/> of <see cref="IconState.Name"/>s mapped to <see cref="Image"/>s given a <paramref name="dmi"/> and it's data <paramref name="stream"/></returns>
-		Dictionary<string, Models.Image> ExtractImages(Dmi dmi, Stream stream)
+		/// <remarks>This code is mostly derived from @lzimann's original icon procs here: https://github.com/Cyberboss/IconDiffBot-python/blob/277e0def44048987d601596b1794354f49dd7412/icons.py#L74 </remarks>
+		static Dictionary<string, Models.Image> ExtractImages(Dmi dmi, Stream stream)
 		{
 			using (var image = new Bitmap(stream))
 			{
+				var results = new Dictionary<string, Models.Image>();
+				var bySha = new Dictionary<string, Models.Image>();
+
 				var iconsPerLine = image.Width / dmi.Width;
 				var totalLines = image.Height / dmi.Height;
 
 				if (!image.PixelFormat.HasFlag(PixelFormat.Alpha))
 					image.MakeTransparent();
 
-				var results = new Dictionary<string, Models.Image>();
-				var bySha = new Dictionary<string, Models.Image>();
 				var iconCount = 0;
-				var nameCount = 1;
 				var skipNaming = 0;
+				var nameCount = 1;
 
 				for (var line = 0; line < totalLines; ++line) {
 					var icon = 0;
@@ -162,16 +165,18 @@ namespace IconDiffBot.Core
 					{
 						var state = dmi.IconStates[iconCount];
 						var name = state.Name;
+
 						if (skipNaming > 0)
 						{
 							if (nameCount > 0)
-								name = String.Format(CultureInfo.InvariantCulture, "{0} F{1}", name, nameCount++);
+								name = String.Format(CultureInfo.InvariantCulture, "{0} F{1}", name, nameCount);
+							++nameCount;
 							if (--skipNaming == 0)
 								++iconCount;
 						}
 						else
 						{
-							skipNaming = state.FrameDelays.Count;
+							skipNaming = (state.Dirs * state.Frames) - 1;
 							if (skipNaming == 0)
 								++iconCount;
 							else
@@ -181,21 +186,25 @@ namespace IconDiffBot.Core
 						var srcRect = new Rectangle
 						{
 							X = icon * dmi.Width,
-							Y = line * dmi.Height,
 							Width = dmi.Width,
+							Y = line * dmi.Height,
 							Height = dmi.Height
 						};
 
 						byte[] imageBytes;
-						using (var target = new Bitmap(dmi.Width, dmi.Height, PixelFormat.Format32bppArgb)) {
-							using (var g = Graphics.FromImage(image))
-								g.DrawImage(image, new Rectangle(0, 0, dmi.Width, dmi.Height), srcRect, GraphicsUnit.Pixel);
-							using (var ms = new MemoryStream())
+						using (var ms = new MemoryStream())
+						{
+							using (var target = new Bitmap(dmi.Width, dmi.Height, PixelFormat.Format32bppArgb))
 							{
+								using (var g = Graphics.FromImage(target))
+									g.DrawImage(image, new Rectangle(0, 0, dmi.Width, dmi.Height), srcRect, GraphicsUnit.Pixel);
 								target.Save(ms, ImageFormat.Png);
-								imageBytes = ms.ToArray();
 							}
+							imageBytes = ms.ToArray();
 						}
+
+						++icon;
+
 						var final = new Models.Image
 						{
 							Data = imageBytes,
@@ -215,7 +224,6 @@ namespace IconDiffBot.Core
 								name = String.Format(CultureInfo.InvariantCulture, "{0}-{1}", baseName, ++counter);
 							while (results.ContainsKey(name));
 						}
-
 						results.Add(name, final);
 					}
 				}
