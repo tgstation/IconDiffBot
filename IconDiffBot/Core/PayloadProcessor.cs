@@ -201,36 +201,32 @@ namespace IconDiffBot.Core
 					Output = new CheckRunOutput(stringLocalizer["Generating Diffs"], stringLocalizer["Aww geez rick, I should eventually put some progress message here"], null, null, null),
 				}, cancellationToken);
 
-				var databaseContext = scope.ServiceProvider.GetRequiredService<IDatabaseContext>();
 				var results = new List<IconDiff>();
 				int fileIdCounter = 0;
-
-				using (var semaphore = new SemaphoreSlim(1))
+				var finalImageDictionary = new Dictionary<string, Image>();
+				async Task DiffDmi(string path)
 				{
-					async Task DiffDmi(string path)
+					async Task<MemoryStream> GetImageFor(string commit)
 					{
-						async Task<MemoryStream> GetImageFor(string commit)
+						var data = await gitHubManager.GetFileAtCommit(pullRequest.Base.Repository.Id, installationId, path, commit, cancellationToken).ConfigureAwait(false);
+						return new MemoryStream(data);
+					}
+
+					var beforeTask = GetImageFor(pullRequest.Base.Sha);
+					using (var after = await GetImageFor(pullRequest.Head.Sha).ConfigureAwait(false))
+					using (var before = await beforeTask.ConfigureAwait(false))
+					{
+						var diffs = diffGenerator.GenerateDiffs(before, after);
+
+						int baseFileId;
+						lock (results)
 						{
-							var data = await gitHubManager.GetFileAtCommit(pullRequest.Base.Repository.Id, installationId, path, commit, cancellationToken).ConfigureAwait(false);
-							return new MemoryStream(data);
+							baseFileId = fileIdCounter;
+							fileIdCounter += diffs.Count;
 						}
 
-						var beforeTask = GetImageFor(pullRequest.Base.Sha);
-						using (var after = await GetImageFor(pullRequest.Head.Sha).ConfigureAwait(false))
-						using (var before = await beforeTask.ConfigureAwait(false))
-						{
-							var diffs = diffGenerator.GenerateDiffs(before, after);
-
-							var finalImageDictionary = new Dictionary<string, Image>();
-
-							int baseFileId;
-							lock (results)
-							{
-								baseFileId = fileIdCounter;
-								fileIdCounter += diffs.Count;
-							}
-
-							//populate metadata
+						//populate metadata
+						lock (finalImageDictionary)
 							foreach (var I in diffs)
 							{
 								I.CheckRunId = checkRunId;
@@ -249,34 +245,31 @@ namespace IconDiffBot.Core
 										finalImageDictionary.Add(I.After.Sha1, I.After);
 							}
 
-							using (await SemaphoreSlimContext.Lock(semaphore, cancellationToken).ConfigureAwait(false))
-							{
-								//decide whether to attach or add images
-								var dbImages = await databaseContext.Images.Where(x => finalImageDictionary.Any(y => y.Key == x.Sha1)).Select(x => new Image
-								{
-									Id = x.Id,
-									Sha1 = x.Sha1
-								}).ToListAsync(cancellationToken).ConfigureAwait(false);
+						lock (results)
+							results.AddRange(diffs);
+					}
+				};
 
-								foreach (var I in dbImages)
-								{
-									var image = finalImageDictionary[I.Sha1];
-									image.Id = I.Id;
-									databaseContext.Images.Attach(image);
-									finalImageDictionary.Remove(I.Sha1);
-								}
+				await Task.WhenAll(changedDmis.Select(x => DiffDmi(x))).ConfigureAwait(false);
 
-								foreach (var I in finalImageDictionary.Select(x => x.Value))
-									databaseContext.Images.Add(I);
-							}
+				var databaseContext = scope.ServiceProvider.GetRequiredService<IDatabaseContext>();
+				//decide whether to attach or add images
+				var dbImages = await databaseContext.Images.Where(x => finalImageDictionary.Any(y => y.Key == x.Sha1)).Select(x => new Image
+				{
+					Id = x.Id,
+					Sha1 = x.Sha1
+				}).ToListAsync(cancellationToken).ConfigureAwait(false);
 
-							lock (results)
-								results.AddRange(diffs);
-						}
-					};
-
-					await Task.WhenAll(changedDmis.Select(x => DiffDmi(x))).ConfigureAwait(false);
+				foreach (var I in dbImages)
+				{
+					var image = finalImageDictionary[I.Sha1];
+					image.Id = I.Id;
+					databaseContext.Images.Attach(image);
+					finalImageDictionary.Remove(I.Sha1);
 				}
+
+				foreach (var I in finalImageDictionary.Select(x => x.Value))
+					databaseContext.Images.Add(I);
 
 				await checkRunDequeueUpdate.ConfigureAwait(false);
 				await HandleResults(pullRequest, installationId, checkRunId, results, scope, databaseContext, cancellationToken).ConfigureAwait(false);
