@@ -127,7 +127,7 @@ namespace IconDiffBot.Core
 				var hash = sha1.ComputeHash(input);
 				var sb = new StringBuilder(hash.Length * 2);
 
-				foreach (byte b in hash)
+				foreach (var b in hash)
 					sb.Append(b.ToString("x2", CultureInfo.InvariantCulture));
 
 				return sb.ToString();
@@ -140,7 +140,7 @@ namespace IconDiffBot.Core
 		/// <param name="dmi">The <see cref="Dmi"/></param>
 		/// <param name="stream">The <see cref="Stream"/> containing the <see cref="Dmi"/> data</param>
 		/// <returns>A <see cref="Dictionary{TKey, TValue}"/> of <see cref="IconState.Name"/>s mapped to <see cref="Image"/>s given a <paramref name="dmi"/> and it's data <paramref name="stream"/></returns>
-		Dictionary<string, Models.Image> ExtractImages(Dmi dmi, Stream stream)
+		static Dictionary<string, Models.Image> ExtractImages(Dmi dmi, Stream stream)
 		{
 			using (var image = new Bitmap(stream))
 			{
@@ -165,13 +165,14 @@ namespace IconDiffBot.Core
 						if (skipNaming > 0)
 						{
 							if (nameCount > 0)
-								name = String.Format(CultureInfo.InvariantCulture, "{0} F{1}", name, nameCount++);
+								name = String.Format(CultureInfo.InvariantCulture, "{0} F{1}", name, nameCount);
+							++nameCount;
 							if (--skipNaming == 0)
 								++iconCount;
 						}
 						else
 						{
-							skipNaming = state.FrameDelays.Count;
+							skipNaming = (state.Frames * state.Dirs) - 1;
 							if (skipNaming == 0)
 								++iconCount;
 							else
@@ -186,16 +187,27 @@ namespace IconDiffBot.Core
 							Height = dmi.Height
 						};
 
-						byte[] imageBytes;
-						using (var target = new Bitmap(dmi.Width, dmi.Height, PixelFormat.Format32bppArgb)) {
-							using (var g = Graphics.FromImage(image))
-								g.DrawImage(image, new Rectangle(0, 0, dmi.Width, dmi.Height), srcRect, GraphicsUnit.Pixel);
-							using (var ms = new MemoryStream())
-							{
-								target.Save(ms, ImageFormat.Png);
-								imageBytes = ms.ToArray();
-							}
+						if (results.ContainsKey(name))
+						{
+							var baseName = name;
+							int counter = 1;
+							do
+								name = String.Format(CultureInfo.InvariantCulture, "{0}-{1}", baseName, ++counter);
+							while (results.ContainsKey(name));
 						}
+
+						byte[] imageBytes;
+						using (var ms = new MemoryStream())
+						{
+							using (var target = new Bitmap(dmi.Width, dmi.Height, PixelFormat.Format32bppArgb))
+							{
+								using (var g = Graphics.FromImage(target))
+									g.DrawImage(image, new Rectangle(0, 0, dmi.Width, dmi.Height), srcRect, GraphicsUnit.Pixel);
+								target.Save(ms, ImageFormat.Png);
+							}
+							imageBytes = ms.ToArray();
+						}
+
 						var final = new Models.Image
 						{
 							Data = imageBytes,
@@ -207,15 +219,7 @@ namespace IconDiffBot.Core
 						else
 							bySha.Add(final.Sha1, final);
 
-						if (results.ContainsKey(name))
-						{
-							var baseName = name;
-							int counter = 1;
-							do
-								name = String.Format(CultureInfo.InvariantCulture, "{0}-{1}", baseName, ++counter);
-							while (results.ContainsKey(name));
-						}
-
+						++icon;
 						results.Add(name, final);
 					}
 				}

@@ -213,6 +213,8 @@ namespace IconDiffBot.Core
 					}
 
 					var beforeTask = GetImageFor(pullRequest.Base.Sha);
+					var attachedShas = new Dictionary<string, Image>();
+
 					using (var after = await GetImageFor(pullRequest.Head.Sha).ConfigureAwait(false))
 					using (var before = await beforeTask.ConfigureAwait(false))
 					{
@@ -228,27 +230,31 @@ namespace IconDiffBot.Core
 
 							var matchingImages = await query.Select(x => new Image
 							{
-								Id = x.Id
+								Id = x.Id,
+								Sha1 = x.Sha1
 							}).ToListAsync(cancellationToken).ConfigureAwait(false);
 
 							var beforeQueryResult = matchingImages.FirstOrDefault(x => x.Sha1 == iconDiff.Before?.Sha1);
 							var afterQueryResult = matchingImages.FirstOrDefault(x => x.Sha1 == iconDiff.Before?.Sha1);
 							lock (databaseContext)
 							{
-								if (beforeQueryResult != default(Models.Image))
+								if (beforeQueryResult != default(Image))
 								{
-									databaseContext.Images.Attach((Models.Image)beforeQueryResult);
+									databaseContext.Images.Attach(beforeQueryResult);
+									attachedShas.Add(iconDiff.Before.Sha1, beforeQueryResult);
 									iconDiff.Before = beforeQueryResult;
 								}
 								else if (iconDiff.Before != null)
 									databaseContext.Images.Add(iconDiff.Before);
-								if (afterQueryResult != default(Models.Image))
+								if (afterQueryResult != default(Image))
 								{
-									databaseContext.Images.Attach((Models.Image)afterQueryResult);
+									databaseContext.Images.Attach(afterQueryResult);
 									iconDiff.Before = afterQueryResult;
 								}
-								else if (iconDiff.Before != null)
-									databaseContext.Images.Add(iconDiff.Before);
+								else if (iconDiff.After != null)
+									databaseContext.Images.Add(iconDiff.After);
+								attachedShas.Add(iconDiff.Before.Sha1, iconDiff.Before);
+								attachedShas.Add(iconDiff.After.Sha1, iconDiff.After);
 							}
 							return iconDiff;
 						};
