@@ -216,8 +216,6 @@ namespace IconDiffBot.Core
 						}
 
 						var beforeTask = GetImageFor(pullRequest.Base.Sha);
-						var attachedShas = new Dictionary<string, Image>();
-
 						using (var after = await GetImageFor(pullRequest.Head.Sha).ConfigureAwait(false))
 						using (var before = await beforeTask.ConfigureAwait(false))
 						{
