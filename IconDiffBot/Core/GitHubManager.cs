@@ -61,7 +61,7 @@ namespace IconDiffBot.Core
 
 			if (installation != null)
 			{
-				if (installation.AccessTokenExpiry < DateTimeOffset.UtcNow.AddMinutes(-10))
+				if (installation.AccessTokenExpiry < DateTimeOffset.UtcNow.AddMinutes(-30))
 				{
 					var newToken = await gitHubClientFactory.CreateAppClient().GitHubApps.CreateInstallationToken(installation.Id).ConfigureAwait(false);
 					installation.AccessToken = newToken.Token;
