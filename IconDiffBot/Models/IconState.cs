@@ -25,7 +25,7 @@ namespace IconDiffBot.Models
 		/// <summary>
 		/// Number of frames in the state
 		/// </summary>
-		public int Frames => FrameDelays.Count + 1;
+		public int Frames { get; set; }
 
 		/// <summary>
 		/// Delays between frames in the state
