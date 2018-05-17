@@ -288,9 +288,7 @@ namespace IconDiffBot.Core
 		/// <param name="cancellationToken">The <see cref="CancellationToken"/> for the operation</param>
 		/// <returns>A <see cref="Task"/> representing the running operation</returns>
 		async Task HandleResults(PullRequest pullRequest, long installationId, long checkRunId, List<IconDiff> diffResults, IServiceScope scope, IDatabaseContext databaseContext, CancellationToken cancellationToken)
-		{
-			int formatterCount = 0;
-			
+		{			
 			logger.LogTrace("Generating check run output and preparing database query...");
 
 			var outputImages = new List<CheckRunImage>()
@@ -328,8 +326,8 @@ namespace IconDiffBot.Core
 				
 				foreach(var I in kv.Value)
 				{
-					var beforeUrl = String.Concat(prefix, FilesController.RouteTo(pullRequest.Base.Repository, checkRunId, formatterCount, true));
-					var afterUrl = String.Concat(prefix, FilesController.RouteTo(pullRequest.Base.Repository, checkRunId, formatterCount, false));
+					var beforeUrl = String.Concat(prefix, FilesController.RouteTo(pullRequest.Base.Repository, checkRunId, I.FileId, true));
+					var afterUrl = String.Concat(prefix, FilesController.RouteTo(pullRequest.Base.Repository, checkRunId, I.FileId, false));
 
 					commentBuilder.Append(String.Format(CultureInfo.InvariantCulture,
 						"{0}{1} | ![]({2}) | ![]({3}) | {4}",
@@ -339,8 +337,6 @@ namespace IconDiffBot.Core
 						afterUrl,
 						stringLocalizer[I.Before == null ? "Created" : I.After == null ? "Deleted" : "Modified"]
 						));
-
-					++formatterCount;
 				}
 
 				commentBuilder.Append(String.Format(CultureInfo.InvariantCulture, "{0}{0}</details>{0}{0}", Environment.NewLine));
