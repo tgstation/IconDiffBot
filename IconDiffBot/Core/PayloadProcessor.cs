@@ -139,7 +139,7 @@ namespace IconDiffBot.Core
 						CompletedAt = DateTimeOffset.Now,
 						Status = CheckStatus.Completed,
 						Conclusion = CheckConclusion.Neutral,
-						Output = new CheckRunOutput(stringLocalizer["No Modified Icons"], stringLocalizer["No modified .dnu files were detected in this pull request"], null, null, null)
+						Output = new CheckRunOutput(stringLocalizer["No Modified Icons"], stringLocalizer["No modified .dmi files were detected in this pull request"], null, null, null)
 					}, cancellationToken).ConfigureAwait(false);
 					return;
 				}
