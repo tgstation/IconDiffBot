@@ -24,6 +24,8 @@ namespace IconDiffBot.Core
 		/// <returns>The .dmi metadata string</returns>
 		static string StreamToMetadataString(Stream stream)
 		{
+			if (stream == null)
+				return null;
 			var metadata = ImageMetadataReader.ReadMetadata(stream);
 			const string DmiHeader = "# BEGIN DMI";
 			var description = metadata.SelectMany(x => x.Tags).First(x => x.Description.Contains(DmiHeader)).Description;
@@ -39,6 +41,8 @@ namespace IconDiffBot.Core
 		/// <returns>The <see cref="Dmi"/> built from <paramref name="metadata"/></returns>
 		static Dmi BuildDmi(string metadata)
 		{
+			if (metadata == null)
+				return null;
 			var lines = metadata.Split('\n');
 
 			var dmi = new Dmi();
@@ -144,6 +148,8 @@ namespace IconDiffBot.Core
 		/// <remarks>This code is mostly derived from @lzimann's original icon procs here: https://github.com/Cyberboss/IconDiffBot-python/blob/277e0def44048987d601596b1794354f49dd7412/icons.py#L74 </remarks>
 		static Dictionary<string, Models.Image> ExtractImages(Dmi dmi, Stream stream)
 		{
+			if (dmi == null && stream == null)
+				return new Dictionary<string, Models.Image>();
 			using (var image = new Bitmap(stream))
 			{
 				var results = new Dictionary<string, Models.Image>();

@@ -133,7 +133,7 @@ namespace IconDiffBot.Core
 			try
 			{
 				var allChangedFiles = await allChangedFilesTask.ConfigureAwait(false);
-				var changedDmis = allChangedFiles.Where(x => x.FileName.EndsWith(".dmi", StringComparison.InvariantCultureIgnoreCase)).Select(x => x.FileName).ToList();
+				var changedDmis = allChangedFiles.Where(x => x.FileName.EndsWith(".dmi", StringComparison.InvariantCultureIgnoreCase)).ToList();
 				if (changedDmis.Count == 0)
 				{
 					logger.LogDebug("Pull request has no changed .dmis, exiting");
@@ -190,11 +190,11 @@ namespace IconDiffBot.Core
 		/// <param name="pullRequest">The <see cref="PullRequest"/></param>
 		/// <param name="installationId">The <see cref="InstallationId.Id"/></param>
 		/// <param name="checkRunId">The <see cref="CheckRun.Id"/></param>
-		/// <param name="changedDmis">Paths to changed .dmm files</param>
+		/// <param name="changedDmis"><see cref="IReadOnlyList{T}"/> of <see cref="PullRequestFile"/>s for changed .dmis</param>
 		/// <param name="scope">The <see cref="IServiceScope"/> for the operation</param>
 		/// <param name="cancellationToken">The <see cref="CancellationToken"/> for the operation</param>
 		/// <returns>A <see cref="Task"/> representing the running operation</returns>
-		async Task GenerateDiffs(PullRequest pullRequest, long installationId, long checkRunId, IReadOnlyList<string> changedDmis, IServiceScope scope, CancellationToken cancellationToken)
+		async Task GenerateDiffs(PullRequest pullRequest, long installationId, long checkRunId, IReadOnlyList<PullRequestFile> changedDmis, IServiceScope scope, CancellationToken cancellationToken)
 		{
 			using (logger.BeginScope("Generating {0} diffs for pull request #{1} in {2}/{3}", changedDmis.Count, pullRequest.Number, pullRequest.Base.Repository.Owner.Login, pullRequest.Base.Repository.Name))
 			{
@@ -208,16 +208,25 @@ namespace IconDiffBot.Core
 				var results = new List<IconDiff>();
 				int fileIdCounter = 0;
 				var finalImageDictionary = new Dictionary<string, Image>();
-				async Task DiffDmi(string path)
+				async Task DiffDmi(PullRequestFile file)
 				{
-					async Task<MemoryStream> GetImageFor(string commit)
+					async Task<MemoryStream> GetImageFor(string commit, bool before)
 					{
-						var data = await gitHubManager.GetFileAtCommit(pullRequest.Base.Repository.Id, installationId, path, commit, cancellationToken).ConfigureAwait(false);
+						var data = await gitHubManager.GetFileAtCommit(pullRequest.Base.Repository.Id, installationId, before ? file.PreviousFileName : file.FileName, commit, cancellationToken).ConfigureAwait(false);
 						return new MemoryStream(data);
 					}
+					Task<MemoryStream> beforeTask;
+					if (file.Status == "added")
+						beforeTask = Task.FromResult<MemoryStream>(null);
+					else
+						beforeTask = GetImageFor(pullRequest.Base.Sha, true);
+					Task<MemoryStream> afterTask;
+					if (file.Status == "removed")
+						afterTask = Task.FromResult<MemoryStream>(null);
+					else
+						afterTask = GetImageFor(pullRequest.Head.Sha, false);
 
-					var beforeTask = GetImageFor(pullRequest.Base.Sha);
-					using (var after = await GetImageFor(pullRequest.Head.Sha).ConfigureAwait(false))
+					using (var after = await afterTask.ConfigureAwait(false))
 					using (var before = await beforeTask.ConfigureAwait(false))
 					{
 						var diffs = diffGenerator.GenerateDiffs(before, after);
@@ -234,7 +243,7 @@ namespace IconDiffBot.Core
 							foreach (var I in diffs)
 							{
 								I.CheckRunId = checkRunId;
-								I.DmiPath = path;
+								I.DmiPath = file.FileName ?? file.PreviousFileName;
 								I.RepositoryId = pullRequest.Base.Repository.Id;
 								I.FileId = ++baseFileId;
 								if (I.Before != null)
