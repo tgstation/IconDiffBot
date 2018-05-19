@@ -212,7 +212,7 @@ namespace IconDiffBot.Core
 				{
 					async Task<MemoryStream> GetImageFor(string commit, bool before)
 					{
-						var data = await gitHubManager.GetFileAtCommit(pullRequest.Base.Repository.Id, installationId, before ? file.PreviousFileName : file.FileName, commit, cancellationToken).ConfigureAwait(false);
+						var data = await gitHubManager.GetFileAtCommit(pullRequest.Base.Repository.Id, installationId, before ? (file.PreviousFileName ?? file.FileName) : file.FileName, commit, cancellationToken).ConfigureAwait(false);
 						return new MemoryStream(data);
 					}
 					Task<MemoryStream> beforeTask;
