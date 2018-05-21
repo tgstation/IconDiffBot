@@ -84,7 +84,8 @@ namespace IconDiffBot.Core
 						inHeader = false;
 						currentState = new IconState
 						{
-							Name = value.Substring(1, value.Length - 2)
+							//if len is 2, it's an empty name
+							Name = value.Length == 2 ? String.Empty : value.Substring(1, value.Length - 2)
 						};
 						dmi.IconStates.Add(currentState);
 						break;
