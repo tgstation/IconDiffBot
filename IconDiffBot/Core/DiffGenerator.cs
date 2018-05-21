@@ -54,9 +54,10 @@ namespace IconDiffBot.Core
 			{
 				if (String.IsNullOrWhiteSpace(I))
 					continue;
-				var splits = I.Split('=');
-				var key = splits[0].Trim();
-				var value = splits[1].Trim();
+				var index = I.IndexOf('=');
+				var key = I.Substring(0, index).Trim();
+				var ip1 = index + 1;
+				var value = I.Substring(ip1, I.Length - ip1).Trim();
 
 				int IntValue() => Convert.ToInt32(value, CultureInfo.InvariantCulture);
 
