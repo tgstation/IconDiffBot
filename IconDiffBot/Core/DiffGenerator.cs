@@ -54,9 +54,10 @@ namespace IconDiffBot.Core
 			{
 				if (String.IsNullOrWhiteSpace(I))
 					continue;
-				var splits = I.Split('=');
-				var key = splits[0].Trim();
-				var value = splits[1].Trim();
+				var index = I.IndexOf('=');
+				var key = I.Substring(0, index).Trim();
+				var ip1 = index + 1;
+				var value = I.Substring(ip1, I.Length - ip1).Trim();
 
 				int IntValue() => Convert.ToInt32(value, CultureInfo.InvariantCulture);
 
@@ -84,7 +85,8 @@ namespace IconDiffBot.Core
 						inHeader = false;
 						currentState = new IconState
 						{
-							Name = value.Substring(1, value.Length - 2)
+							//if len is 2, it's an empty name
+							Name = value.Length == 2 ? String.Empty : value.Substring(1, value.Length - 2)
 						};
 						dmi.IconStates.Add(currentState);
 						break;
