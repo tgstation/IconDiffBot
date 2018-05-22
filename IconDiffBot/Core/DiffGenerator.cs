@@ -145,6 +145,11 @@ namespace IconDiffBot.Core
 			}
 		}
 
+		/// <summary>
+		/// Converts a <paramref name="source"/> image to a <see cref="Models.Image"/>
+		/// </summary>
+		/// <param name="source">The <see cref="Bitmap"/> to convert</param>
+		/// <returns>A <see cref="Models.Image"/> representing <paramref name="source"/></returns>
 		static Models.Image ImageToModel(Bitmap source)
 		{
 			byte[] imageBytes;
@@ -160,6 +165,13 @@ namespace IconDiffBot.Core
 			};
 		}
 
+		/// <summary>
+		/// Copys a region of <paramref name="source"/> to <paramref name="target"/>
+		/// </summary>
+		/// <param name="source">The source <see cref="Bitmap"/></param>
+		/// <param name="target">The target <see cref="Bitmap"/></param>
+		/// <param name="srcRect">The source <see cref="Rectangle"/></param>
+		/// <param name="targRect">The target <see cref="Rectangle"/></param>
 		static void CopyImageRegion(Bitmap source, Bitmap target, Rectangle srcRect, Rectangle targRect)
 		{
 			using (var g = Graphics.FromImage(target))
