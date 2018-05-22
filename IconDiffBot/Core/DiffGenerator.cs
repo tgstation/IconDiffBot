@@ -207,8 +207,7 @@ namespace IconDiffBot.Core
 					{
 						using (var tmpImage = new Bitmap(new MemoryStream(I.Data)))
 							CopyImageRegion(tmpImage, target, srcRect, targetRect);
-						srcRect.X += dmi.Width;
-						targetRect.X = srcRect.X;
+						targetRect.X += dmi.Width;
 					}
 
 					return ImageToModel(target);
