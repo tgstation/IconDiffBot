@@ -38,8 +38,9 @@ namespace IconDiffBot.Controllers
 		/// <param name="checkRunId">The <see cref="CheckRun.Id"/></param>
 		/// <param name="fileId">The <see cref="IconDiff.FileId"/></param>
 		/// <param name="before"><see langword="true"/> for "before", "after" otherwise</param>
+		/// <param name="isGif">If the <see cref="IconDiff"/> is for a .gif</param>
 		/// <returns>A relative url to the appropriate <see cref="FilesController"/> action</returns>
-		public static string RouteTo(Repository repository, long checkRunId, int fileId, bool before) => String.Format(CultureInfo.InvariantCulture, "/{4}/{0}/{1}/{2}/{3}.png", repository.Id, checkRunId, fileId, before ? "before" : "after", Route);
+		public static string RouteTo(Repository repository, long checkRunId, int fileId, bool before, bool isGif) => String.Format(CultureInfo.InvariantCulture, "/{4}/{0}/{1}/{2}/{3}.{5}", repository.Id, checkRunId, fileId, before ? "before" : "after", Route, isGif ? "gif" : "png");
 
 		/// <summary>
 		/// Construct a <see cref="FilesController"/>
@@ -59,19 +60,27 @@ namespace IconDiffBot.Controllers
 		/// <param name="checkRunId">The <see cref="CheckRun.Id"/></param>
 		/// <param name="fileId">The <see cref="IconDiff.FileId"/></param>
 		/// <param name="beforeOrAfter">"before" or "after"</param>
+		/// <param name="postfix">The requested image extension</param>
 		/// <param name="cancellationToken">The <see cref="CancellationToken"/> for the operation</param>
 		/// <returns>A <see cref="Task{TResult}"/> resulting in the <see cref="IActionResult"/> of the operation</returns>
-		[HttpGet("{repositoryId}/{checkRunId}/{fileId}/{beforeOrAfter}.png")]
+		[HttpGet("{repositoryId}/{checkRunId}/{fileId}/{beforeOrAfter}.{postfix}")]
 		[ResponseCache(VaryByHeader = "User-Agent", Duration = 60)]
-		public async Task<IActionResult> HandleIconGet(long repositoryId, long checkRunId, int fileId, string beforeOrAfter, CancellationToken cancellationToken)
+		public async Task<IActionResult> HandleIconGet(long repositoryId, long checkRunId, int fileId, string beforeOrAfter, string postfix, CancellationToken cancellationToken)
 		{
 			if (beforeOrAfter == null)
 				throw new ArgumentNullException(nameof(beforeOrAfter));
+			if (postfix == null)
+				throw new ArgumentNullException(nameof(postfix));
+
+			postfix = postfix.ToUpperInvariant();
+			var gif = postfix == "GIF";
+			if (!gif && postfix != "PNG")
+				return BadRequest();
 
 			logger.LogTrace("Recieved GET: {0}/{1}/{2}/{3}.png", repositoryId, checkRunId, fileId, beforeOrAfter);
 
 			beforeOrAfter = beforeOrAfter.ToUpperInvariant();
-			bool before = beforeOrAfter == "BEFORE";
+			var before = beforeOrAfter == "BEFORE";
 			if (!before && beforeOrAfter != "AFTER")
 				return BadRequest();
 
@@ -80,7 +89,7 @@ namespace IconDiffBot.Controllers
 			if (diff == null)
 				return NotFound();
 
-			return File(diff, "image/png");
+			return File(diff, gif ? "image/png" : "image/gif");
 		}
 	}
 }

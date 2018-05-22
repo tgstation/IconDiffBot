@@ -1,4 +1,5 @@
 ﻿using System.ComponentModel.DataAnnotations;
+using System.ComponentModel.DataAnnotations.Schema;
 
 namespace IconDiffBot.Models
 {
@@ -21,6 +22,7 @@ namespace IconDiffBot.Models
 		/// <summary>
 		/// If the <see cref="Image"/> is animated
 		/// </summary>
+		[NotMapped]
 		public bool IsGif { get; set; }
 
 		/// <summary>
