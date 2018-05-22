@@ -11,6 +11,7 @@ using System.Text;
 
 using Stream = System.IO.Stream;
 using MemoryStream = System.IO.MemoryStream;
+using ImageMagick;
 
 namespace IconDiffBot.Core
 {
@@ -91,8 +92,11 @@ namespace IconDiffBot.Core
 						dmi.IconStates.Add(currentState);
 						break;
 					case "hotspot":
+						EnsureHeader(false);
+						break;
 					case "loop":
 						EnsureHeader(false);
+						currentState.LoopCount = IntValue();
 						break;
 					case "dirs":
 						EnsureHeader(false);
@@ -141,6 +145,27 @@ namespace IconDiffBot.Core
 			}
 		}
 
+		static Models.Image ImageToModel(Bitmap source)
+		{
+			byte[] imageBytes;
+			using (var ms = new MemoryStream())
+			{
+				source.Save(ms, ImageFormat.Png);
+				imageBytes = ms.ToArray();
+			}
+			return new Models.Image
+			{
+				Data = imageBytes,
+				Sha1 = Hash(imageBytes)
+			};
+		}
+
+		static void CopyImageRegion(Bitmap source, Bitmap target, Rectangle srcRect, Rectangle targRect)
+		{
+			using (var g = Graphics.FromImage(target))
+				g.DrawImage(source, targRect, srcRect, GraphicsUnit.Pixel);
+		}
+		
 		/// <summary>
 		/// Builds a <see cref="Dictionary{TKey, TValue}"/> of <see cref="IconState.Name"/>s mapped to <see cref="Image"/>s given a <paramref name="dmi"/> and it's data <paramref name="stream"/>
 		/// </summary>
@@ -152,88 +177,158 @@ namespace IconDiffBot.Core
 		{
 			if (dmi == null && stream == null)
 				return new Dictionary<string, Models.Image>();
+
+			Rectangle DmiRect() => new Rectangle
+			{
+				Width = dmi.Width,
+				Height = dmi.Height
+			};
+
+			Models.Image GetSingleImageForDirs(IEnumerable<Models.Image> images)
+			{
+				var srcRect = DmiRect();
+				var targetRect = DmiRect();
+
+				using (var target = new Bitmap(dmi.Width * images.Count(), dmi.Height, PixelFormat.Format32bppArgb))
+				{
+					foreach (var I in images)
+					{
+						using (var tmpImage = new Bitmap(new MemoryStream(I.Data)))
+							CopyImageRegion(tmpImage, target, srcRect, targetRect);
+						srcRect.X += dmi.Width;
+						targetRect.X = srcRect.X;
+					}
+
+					return ImageToModel(target);
+				}
+			};
+
 			using (var image = new Bitmap(stream))
 			{
 				var results = new Dictionary<string, Models.Image>();
 				var bySha = new Dictionary<string, Models.Image>();
 
 				var iconsPerLine = image.Width / dmi.Width;
-				var totalLines = image.Height / dmi.Height;
 
 				if (!image.PixelFormat.HasFlag(PixelFormat.Alpha))
 					image.MakeTransparent();
 
-				var iconCount = 0;
-				var skipNaming = 0;
-				var nameCount = 1;
+				var iconXPos = 0;
+				var iconYPos = 0;
 
-				for (var line = 0; line < totalLines; ++line) {
-					var icon = 0;
-					while (icon < iconsPerLine && iconCount < dmi.IconStates.Count)
+				Models.Image GetNextFrameImage()
+				{
+					var srcRect = DmiRect();
+					srcRect.X = iconXPos * dmi.Width;
+					srcRect.Y = iconYPos * dmi.Height;
+
+					iconXPos = ++iconXPos % iconsPerLine;
+					if (iconXPos == 0)
+						++iconYPos;
+
+					using (var target = new Bitmap(srcRect.Width, srcRect.Height, PixelFormat.Format32bppArgb))
 					{
-						var state = dmi.IconStates[iconCount];
-						var name = state.Name;
-
-						if (skipNaming > 0)
-						{
-							if (nameCount > 0)
-								name = String.Format(CultureInfo.InvariantCulture, "{0} F{1}", name, nameCount);
-							++nameCount;
-							if (--skipNaming == 0)
-								++iconCount;
-						}
-						else
-						{
-							skipNaming = (state.Dirs * state.Frames) - 1;
-							if (skipNaming == 0)
-								++iconCount;
-							else
-								nameCount = 1;
-						}
-
-						var srcRect = new Rectangle
-						{
-							X = icon * dmi.Width,
-							Width = dmi.Width,
-							Y = line * dmi.Height,
-							Height = dmi.Height
-						};
-
-						byte[] imageBytes;
-						using (var ms = new MemoryStream())
-						{
-							using (var target = new Bitmap(dmi.Width, dmi.Height, PixelFormat.Format32bppArgb))
-							{
-								using (var g = Graphics.FromImage(target))
-									g.DrawImage(image, new Rectangle(0, 0, dmi.Width, dmi.Height), srcRect, GraphicsUnit.Pixel);
-								target.Save(ms, ImageFormat.Png);
-							}
-							imageBytes = ms.ToArray();
-						}
-
-						++icon;
-
-						var final = new Models.Image
-						{
-							Data = imageBytes,
-							Sha1 = Hash(imageBytes)
-						};
-
-						if (bySha.TryGetValue(final.Sha1, out Models.Image olderOne))
-							final = olderOne;
-						else
-							bySha.Add(final.Sha1, final);
-
-						if (results.ContainsKey(name))
-						{
-							var baseName = name;
-							int counter = 1;
-							do
-								name = String.Format(CultureInfo.InvariantCulture, "{0}-{1}", baseName, ++counter);
-							while (results.ContainsKey(name));
-						}
-						results.Add(name, final);
+						CopyImageRegion(image, target, srcRect, DmiRect());
+						return ImageToModel(target);
 					}
+				};
+
+				foreach (var state in dmi.IconStates)
+				{
+					Models.Image CreateGifForFrames(IEnumerable<Models.Image> images)
+					{
+						var index = 0;
+						using (var gifCreator = new MagickImageCollection())
+						{
+							foreach (var I in images)
+							{
+								var img = new MagickImage(I.Data)
+								{
+									AnimationDelay = (int)(state.FrameDelays[index++] * 10)
+								};
+								if (state.LoopCount.HasValue)
+									img.AnimationIterations = state.LoopCount.Value;
+
+								gifCreator.Add(img);
+							}
+
+							if (state.Rewind)
+							{
+								//add reverse order
+								bool skippedFirst = false;
+								foreach(var I in images.Reverse())
+								{
+									if (!skippedFirst)
+										skippedFirst = true;
+									else
+									{
+										var img = new MagickImage(I.Data)
+										{
+											AnimationDelay = (int)(state.FrameDelays[--index] * 10)
+										};
+										if (state.LoopCount.HasValue)
+											img.AnimationIterations = state.LoopCount.Value;
+
+										gifCreator.Add(img);
+									}
+								}
+							}
+
+							gifCreator.Optimize();
+							gifCreator.OptimizeTransparency();
+
+							var result = new Models.Image()
+							{
+								IsGif = true
+							};
+							using (var ms = new MemoryStream())
+							{
+								gifCreator.Write(ms, MagickFormat.Gif);
+								result.Data = ms.ToArray();
+							}
+							result.Sha1 = Hash(result.Data);
+							return result;
+						}
+					};
+
+					var frameSets = new List<List<Models.Image>>(
+						Enumerable.Range(0, state.Frames).Select(frame =>
+							new List<Models.Image>(
+								Enumerable.Range(0, state.Dirs).Select(x => GetNextFrameImage())
+						)));
+
+					//collected all dirs and frames
+					Models.Image final;
+					if (frameSets.Count == 1)
+						//static image, one dir
+						if (frameSets.First().Count == 1)
+							final = frameSets.First().First();
+						//static image, multiple dirs
+						else
+							final = GetSingleImageForDirs(frameSets.First());
+					//animated image, one dir
+					else if (frameSets.First().Count == 1)
+						final = CreateGifForFrames(frameSets.Select(x => x.First()));
+					//animated image, multiple dirs
+					else
+						final = CreateGifForFrames(frameSets.Select(x => GetSingleImageForDirs(x)));
+
+
+					if (bySha.TryGetValue(final.Sha1, out Models.Image olderOne))
+						final = olderOne;
+					else
+						bySha.Add(final.Sha1, final);
+
+					var name = state.Name;
+					if (results.ContainsKey(name))
+					{
+						var baseName = name;
+						int counter = 1;
+						do
+							name = String.Format(CultureInfo.InvariantCulture, "{0}-{1}", baseName, ++counter);
+						while (results.ContainsKey(name));
+					}
+					results.Add(name, final);
 				}
 
 				return results;

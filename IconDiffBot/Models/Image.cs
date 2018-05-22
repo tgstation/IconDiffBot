@@ -19,6 +19,11 @@ namespace IconDiffBot.Models
 		public string Sha1 { get; set; }
 
 		/// <summary>
+		/// If the <see cref="Image"/> is animated
+		/// </summary>
+		public bool IsGif { get; set; }
+
+		/// <summary>
 		/// The binary image data
 		/// </summary>
 		[Required]

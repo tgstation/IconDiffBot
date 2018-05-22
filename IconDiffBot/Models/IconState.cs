@@ -23,6 +23,11 @@ namespace IconDiffBot.Models
 		public bool Rewind { get; set; }
 
 		/// <summary>
+		/// The number of times the state loops if not infinite
+		/// </summary>
+		public int? LoopCount { get; set; }
+
+		/// <summary>
 		/// Number of frames in the state
 		/// </summary>
 		public int Frames { get; set; }
