@@ -1,4 +1,5 @@
 ﻿using System.ComponentModel.DataAnnotations;
+using System.ComponentModel.DataAnnotations.Schema;
 
 namespace IconDiffBot.Models
 {
@@ -17,6 +18,12 @@ namespace IconDiffBot.Models
 		/// </summary>
 		[Required, StringLength(40, MinimumLength = 40)]
 		public string Sha1 { get; set; }
+
+		/// <summary>
+		/// If the <see cref="Image"/> is animated
+		/// </summary>
+		[NotMapped]
+		public bool IsGif { get; set; }
 
 		/// <summary>
 		/// The binary image data

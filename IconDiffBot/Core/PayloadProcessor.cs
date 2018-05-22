@@ -339,8 +339,8 @@ namespace IconDiffBot.Core
 				
 				foreach(var I in kv.Value)
 				{
-					var beforeUrl = String.Concat(prefix, FilesController.RouteTo(pullRequest.Base.Repository, checkRunId, I.FileId, true));
-					var afterUrl = String.Concat(prefix, FilesController.RouteTo(pullRequest.Base.Repository, checkRunId, I.FileId, false));
+					var beforeUrl = String.Concat(prefix, FilesController.RouteTo(pullRequest.Base.Repository, checkRunId, I.FileId, true, (I.Before ?? I.After).IsGif));
+					var afterUrl = String.Concat(prefix, FilesController.RouteTo(pullRequest.Base.Repository, checkRunId, I.FileId, false, (I.After ?? I.Before).IsGif));
 
 					commentBuilder.Append(String.Format(CultureInfo.InvariantCulture,
 						"{0}{1} | ![]({2}) | ![]({3}) | {4}",
