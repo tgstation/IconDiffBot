@@ -12,7 +12,7 @@ using System.Threading.Tasks;
 namespace IconDiffBot.Controllers
 {
 	/// <summary>
-	/// <see cref="Controller"/> used for recieving GitHub webhooks
+	/// <see cref="Controller"/> used for loading stored images
 	/// </summary>
 	[Route(Route)]
 	public sealed class FilesController : Controller
