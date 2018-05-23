@@ -355,8 +355,17 @@ namespace IconDiffBot.Core
 			var beforeDmi = BuildDmi(beforeString);
 			var afterDmi = BuildDmi(afterString);
 
-			var beforeDic = ExtractImages(beforeDmi, before);
-			var afterDic = ExtractImages(afterDmi, after);
+			Dictionary<string, Models.Image> beforeDic, afterDic;
+			try
+			{
+				beforeDic = ExtractImages(beforeDmi, before);
+				afterDic = ExtractImages(afterDmi, after);
+			}
+			// weird issue with some .dmis
+			catch (ArgumentException)
+			{
+				return null;
+			}
 
 			var results = new List<IconDiff>();
 

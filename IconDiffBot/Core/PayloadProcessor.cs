@@ -231,35 +231,50 @@ namespace IconDiffBot.Core
 					{
 						var diffs = diffGenerator.GenerateDiffs(before, after);
 
-						int baseFileId;
-						lock (results)
+						if (diffs == null)
 						{
-							baseFileId = fileIdCounter;
-							fileIdCounter += diffs.Count;
+							//System.Drawing issue
+							lock (results)
+								results.Add(new IconDiff
+								{
+									DmiPath = file.FileName ?? file.PreviousFileName,
+									CheckRunId = checkRunId,
+									FileId = ++fileIdCounter,
+									RepositoryId = pullRequest.Base.Repository.Id
+								});
 						}
-
-						//populate metadata
-						lock (finalImageDictionary)
-							foreach (var I in diffs)
+						else
+						{
+							int baseFileId;
+							lock (results)
 							{
-								I.CheckRunId = checkRunId;
-								I.DmiPath = file.FileName ?? file.PreviousFileName;
-								I.RepositoryId = pullRequest.Base.Repository.Id;
-								I.FileId = ++baseFileId;
-								if (I.Before != null)
-									if (finalImageDictionary.TryGetValue(I.Before.Sha1, out Image cachedImage))
-										I.Before = cachedImage;
-									else
-										finalImageDictionary.Add(I.Before.Sha1, I.Before);
-								if (I.After != null)
-									if (finalImageDictionary.TryGetValue(I.After.Sha1, out Image cachedImage))
-										I.After = cachedImage;
-									else
-										finalImageDictionary.Add(I.After.Sha1, I.After);
+								baseFileId = fileIdCounter;
+								fileIdCounter += diffs.Count;
 							}
 
-						lock (results)
-							results.AddRange(diffs);
+							//populate metadata
+							lock (finalImageDictionary)
+								foreach (var I in diffs)
+								{
+									I.CheckRunId = checkRunId;
+									I.DmiPath = file.FileName ?? file.PreviousFileName;
+									I.RepositoryId = pullRequest.Base.Repository.Id;
+									I.FileId = ++baseFileId;
+									if (I.Before != null)
+										if (finalImageDictionary.TryGetValue(I.Before.Sha1, out Image cachedImage))
+											I.Before = cachedImage;
+										else
+											finalImageDictionary.Add(I.Before.Sha1, I.Before);
+									if (I.After != null)
+										if (finalImageDictionary.TryGetValue(I.After.Sha1, out Image cachedImage))
+											I.After = cachedImage;
+										else
+											finalImageDictionary.Add(I.After.Sha1, I.After);
+								}
+
+							lock (results)
+								results.AddRange(diffs);
+						}
 					}
 				};
 
@@ -342,13 +357,19 @@ namespace IconDiffBot.Core
 					var beforeUrl = String.Concat(prefix, FilesController.RouteTo(pullRequest.Base.Repository, checkRunId, I.FileId, true, (I.Before ?? I.After).IsGif));
 					var afterUrl = String.Concat(prefix, FilesController.RouteTo(pullRequest.Base.Repository, checkRunId, I.FileId, false, (I.After ?? I.Before).IsGif));
 
+					string status;
+					if (I.Before == null && I.After == null)
+						status = stringLocalizer["This icon could not be renderered due to an error in System.Drawing. Please add a permalink to the .dmi that caused this [here](https://github.com/tgstation/IconDiffBot/issues/17) to help discover the reason."];
+					else
+						status = stringLocalizer[I.Before == null ? "Created" : I.After == null ? "Deleted" : "Modified"];
+
 					commentBuilder.Append(String.Format(CultureInfo.InvariantCulture,
 						"{0}{1} | ![]({2}) | ![]({3}) | {4}",
 						Environment.NewLine,
 						I.StateName,
 						beforeUrl,
 						afterUrl,
-						stringLocalizer[I.Before == null ? "Created" : I.After == null ? "Deleted" : "Modified"]
+						status
 						));
 				}
 
