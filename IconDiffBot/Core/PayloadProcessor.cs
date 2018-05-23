@@ -337,7 +337,8 @@ namespace IconDiffBot.Core
 					dic.Add(I.DmiPath, list);
 				}
 				list.Add(I);
-				databaseContext.IconDiffs.Add(I);
+				if(I.Before != null || I.After != null)
+					databaseContext.IconDiffs.Add(I);
 			}
 
 			foreach (var kv in dic)
