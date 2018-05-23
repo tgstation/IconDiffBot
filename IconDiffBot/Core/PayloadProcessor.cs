@@ -354,8 +354,8 @@ namespace IconDiffBot.Core
 				
 				foreach(var I in kv.Value)
 				{
-					var beforeUrl = String.Concat(prefix, FilesController.RouteTo(pullRequest.Base.Repository, checkRunId, I.FileId, true, (I.Before ?? I.After).IsGif));
-					var afterUrl = String.Concat(prefix, FilesController.RouteTo(pullRequest.Base.Repository, checkRunId, I.FileId, false, (I.After ?? I.Before).IsGif));
+					var beforeUrl = String.Concat(prefix, FilesController.RouteTo(pullRequest.Base.Repository, checkRunId, I.FileId, true, (I.Before ?? I.After)?.IsGif ?? false));
+					var afterUrl = String.Concat(prefix, FilesController.RouteTo(pullRequest.Base.Repository, checkRunId, I.FileId, false, (I.After ?? I.Before)?.IsGif ?? false));
 
 					string status;
 					if (I.Before == null && I.After == null)
