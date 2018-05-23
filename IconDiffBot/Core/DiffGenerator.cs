@@ -92,6 +92,7 @@ namespace IconDiffBot.Core
 						dmi.IconStates.Add(currentState);
 						break;
 					case "hotspot":
+					case "movement":
 						EnsureHeader(false);
 						break;
 					case "loop":
