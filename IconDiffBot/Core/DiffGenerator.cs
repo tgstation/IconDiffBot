@@ -220,10 +220,10 @@ namespace IconDiffBot.Core
 				var results = new Dictionary<string, Models.Image>();
 				var bySha = new Dictionary<string, Models.Image>();
 
-				var iconsPerLine = image.Width / dmi.Width;
-
 				if (!image.PixelFormat.HasFlag(PixelFormat.Alpha))
 					image.MakeTransparent();
+
+				var iconsPerLine = image.Width / dmi.Width;
 
 				var iconXPos = 0;
 				var iconYPos = 0;
