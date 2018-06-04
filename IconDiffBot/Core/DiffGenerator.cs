@@ -359,7 +359,7 @@ namespace IconDiffBot.Core
 					stream.Seek(0, System.IO.SeekOrigin.Begin);
 					using (var magickImage = new MagickImage(stream))
 					{
-						magickImage.Alpha(AlphaOption.On);
+						magickImage.Alpha(AlphaOption.Transparent);
 						magickImage.Write(ms, MagickFormat.Png);
 					}
 					return ExtractImages(dmi, ms, true);
