@@ -217,10 +217,27 @@ namespace IconDiffBot.Core
 
 			using (var image = new Bitmap(stream))
 			{
+				int iconsPerLine;
+				try
+				{
+					iconsPerLine = image.Width / dmi.Width;
+				}
+				catch (ArgumentException)
+				{
+					//issue with greyscale pngs, convert and rerun
+					using (var ms = new MemoryStream())
+					{
+						using (var magickImage = new MagickImage(stream))
+						{
+							magickImage.Alpha(AlphaOption.On);
+							magickImage.Write(ms, MagickFormat.Png);
+						}
+						return ExtractImages(dmi, ms);
+					}
+				}
+
 				var results = new Dictionary<string, Models.Image>();
 				var bySha = new Dictionary<string, Models.Image>();
-
-				var iconsPerLine = image.Width / dmi.Width;
 
 				if (!image.PixelFormat.HasFlag(PixelFormat.Alpha))
 					image.MakeTransparent();
@@ -268,7 +285,7 @@ namespace IconDiffBot.Core
 							{
 								//add reverse order
 								bool skippedFirst = false;
-								foreach(var I in images.Reverse())
+								foreach (var I in images.Reverse())
 								{
 									if (!skippedFirst)
 										skippedFirst = true;
@@ -356,17 +373,8 @@ namespace IconDiffBot.Core
 			var beforeDmi = BuildDmi(beforeString);
 			var afterDmi = BuildDmi(afterString);
 
-			Dictionary<string, Models.Image> beforeDic, afterDic;
-			try
-			{
-				beforeDic = ExtractImages(beforeDmi, before);
-				afterDic = ExtractImages(afterDmi, after);
-			}
-			// weird issue with some .dmis
-			catch (ArgumentException)
-			{
-				return null;
-			}
+			var beforeDic = ExtractImages(beforeDmi, before);
+			var afterDic = ExtractImages(afterDmi, after);
 
 			var results = new List<IconDiff>();
 

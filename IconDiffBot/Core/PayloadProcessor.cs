@@ -360,7 +360,7 @@ namespace IconDiffBot.Core
 
 					string status;
 					if (I.Before == null && I.After == null)
-						status = stringLocalizer["This icon could not be renderered due to an error in System.Drawing. Please add a permalink to the .dmi that caused this [here](https://github.com/tgstation/IconDiffBot/issues/17) to help discover the reason."];
+						status = stringLocalizer["This icon could not be renderered due to an error. Please add a permalink to the .dmi that caused this [here]({0}) to help discover the reason.", IssueReportUrl];
 					else
 						status = stringLocalizer[I.Before == null ? "Created" : I.After == null ? "Deleted" : "Modified"];
 
