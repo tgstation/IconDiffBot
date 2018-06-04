@@ -10,6 +10,8 @@ using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
 
+using Path = System.IO.Path;
+
 namespace IconDiffBot.Core
 {
 	/// <inheritdoc />
@@ -130,12 +132,20 @@ namespace IconDiffBot.Core
 				throw new ArgumentNullException(nameof(filePath));
 			if (String.IsNullOrWhiteSpace(commit))
 				throw new ArgumentNullException(nameof(commit));
+
 			logger.LogTrace("Get file for ref {0} on repository {1}", commit, repositoryId);
 			var client = await CreateInstallationClient(installationId, cancellationToken).ConfigureAwait(false);
-			var files = await client.Repository.Content.GetAllContentsByRef(repositoryId, filePath, commit).ConfigureAwait(false);
-			return Convert.FromBase64String(files[0].EncodedContent);
+
+			//first get the directory
+			var dir = Path.GetDirectoryName(filePath);
+			var dirInfo = await client.Repository.Content.GetAllContentsByRef(repositoryId, dir, commit).ConfigureAwait(false);
+			var theDroid = dirInfo.Where(x => x.Path == filePath).First();
+			//use git api to get the file
+			var file = await client.Git.Blob.Get(repositoryId, theDroid.Sha).ConfigureAwait(false);
+			return Convert.FromBase64String(file.Content);
 		}
 
+		/// <inheritdoc />
 		public async Task<IEnumerable<CheckRun>> GetMatchingCheckRuns(long repositoryId, long installationId, long checkSuiteId, CancellationToken cancellationToken)
 		{
 			var client = await CreateInstallationClient(installationId, cancellationToken).ConfigureAwait(false);
