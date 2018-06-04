@@ -178,7 +178,7 @@ namespace IconDiffBot.Core
 			using (var g = Graphics.FromImage(target))
 				g.DrawImage(source, targRect, srcRect, GraphicsUnit.Pixel);
 		}
-		
+
 		/// <summary>
 		/// Builds a <see cref="Dictionary{TKey, TValue}"/> of <see cref="IconState.Name"/>s mapped to <see cref="Image"/>s given a <paramref name="dmi"/> and it's data <paramref name="stream"/>
 		/// </summary>
@@ -215,152 +215,152 @@ namespace IconDiffBot.Core
 				}
 			};
 
-			using (var image = new Bitmap(stream))
+			try
 			{
-				int iconsPerLine;
-				try
+				using (var image = new Bitmap(stream))
 				{
-					iconsPerLine = image.Width / dmi.Width;
-				}
-				catch (ArgumentException)
-				{
-					//issue with greyscale pngs, convert and rerun
-					using (var ms = new MemoryStream())
+					var iconsPerLine = image.Width / dmi.Width;
+
+					var results = new Dictionary<string, Models.Image>();
+					var bySha = new Dictionary<string, Models.Image>();
+
+					if (!image.PixelFormat.HasFlag(PixelFormat.Alpha))
+						image.MakeTransparent();
+
+					var iconXPos = 0;
+					var iconYPos = 0;
+
+					Models.Image GetNextFrameImage()
 					{
-						using (var magickImage = new MagickImage(stream))
+						var srcRect = DmiRect();
+						srcRect.X = iconXPos * dmi.Width;
+						srcRect.Y = iconYPos * dmi.Height;
+
+						iconXPos = ++iconXPos % iconsPerLine;
+						if (iconXPos == 0)
+							++iconYPos;
+
+						using (var target = new Bitmap(srcRect.Width, srcRect.Height, PixelFormat.Format32bppArgb))
 						{
-							magickImage.Alpha(AlphaOption.On);
-							magickImage.Write(ms, MagickFormat.Png);
-						}
-						return ExtractImages(dmi, ms);
-					}
-				}
-
-				var results = new Dictionary<string, Models.Image>();
-				var bySha = new Dictionary<string, Models.Image>();
-
-				if (!image.PixelFormat.HasFlag(PixelFormat.Alpha))
-					image.MakeTransparent();
-
-				var iconXPos = 0;
-				var iconYPos = 0;
-
-				Models.Image GetNextFrameImage()
-				{
-					var srcRect = DmiRect();
-					srcRect.X = iconXPos * dmi.Width;
-					srcRect.Y = iconYPos * dmi.Height;
-
-					iconXPos = ++iconXPos % iconsPerLine;
-					if (iconXPos == 0)
-						++iconYPos;
-
-					using (var target = new Bitmap(srcRect.Width, srcRect.Height, PixelFormat.Format32bppArgb))
-					{
-						CopyImageRegion(image, target, srcRect, DmiRect());
-						return ImageToModel(target);
-					}
-				};
-
-				foreach (var state in dmi.IconStates)
-				{
-					Models.Image CreateGifForFrames(IEnumerable<Models.Image> images)
-					{
-						var index = 0;
-						using (var gifCreator = new MagickImageCollection())
-						{
-							foreach (var I in images)
-							{
-								var img = new MagickImage(I.Data)
-								{
-									AnimationDelay = (int)(state.FrameDelays[index++] * 10)
-								};
-								if (state.LoopCount.HasValue)
-									img.AnimationIterations = state.LoopCount.Value;
-
-								gifCreator.Add(img);
-							}
-
-							if (state.Rewind)
-							{
-								//add reverse order
-								bool skippedFirst = false;
-								foreach (var I in images.Reverse())
-								{
-									if (!skippedFirst)
-										skippedFirst = true;
-									else
-									{
-										var img = new MagickImage(I.Data)
-										{
-											AnimationDelay = (int)(state.FrameDelays[--index] * 10)
-										};
-										if (state.LoopCount.HasValue)
-											img.AnimationIterations = state.LoopCount.Value;
-
-										gifCreator.Add(img);
-									}
-								}
-							}
-
-							gifCreator.Optimize();
-							gifCreator.OptimizeTransparency();
-
-							var result = new Models.Image()
-							{
-								IsGif = true
-							};
-							using (var ms = new MemoryStream())
-							{
-								gifCreator.Write(ms, MagickFormat.Gif);
-								result.Data = ms.ToArray();
-							}
-							result.Sha1 = Hash(result.Data);
-							return result;
+							CopyImageRegion(image, target, srcRect, DmiRect());
+							return ImageToModel(target);
 						}
 					};
 
-					var frameSets = new List<List<Models.Image>>(
-						Enumerable.Range(0, state.Frames).Select(frame =>
-							new List<Models.Image>(
-								Enumerable.Range(0, state.Dirs).Select(x => GetNextFrameImage())
-						)));
-
-					//collected all dirs and frames
-					Models.Image final;
-					if (frameSets.Count == 1)
-						//static image, one dir
-						if (frameSets.First().Count == 1)
-							final = frameSets.First().First();
-						//static image, multiple dirs
-						else
-							final = GetSingleImageForDirs(frameSets.First());
-					//animated image, one dir
-					else if (frameSets.First().Count == 1)
-						final = CreateGifForFrames(frameSets.Select(x => x.First()));
-					//animated image, multiple dirs
-					else
-						final = CreateGifForFrames(frameSets.Select(x => GetSingleImageForDirs(x)));
-
-
-					if (bySha.TryGetValue(final.Sha1, out Models.Image olderOne))
-						final = olderOne;
-					else
-						bySha.Add(final.Sha1, final);
-
-					var name = state.Name;
-					if (results.ContainsKey(name))
+					foreach (var state in dmi.IconStates)
 					{
-						var baseName = name;
-						int counter = 1;
-						do
-							name = String.Format(CultureInfo.InvariantCulture, "{0}-{1}", baseName, ++counter);
-						while (results.ContainsKey(name));
-					}
-					results.Add(name, final);
-				}
+						Models.Image CreateGifForFrames(IEnumerable<Models.Image> images)
+						{
+							var index = 0;
+							using (var gifCreator = new MagickImageCollection())
+							{
+								foreach (var I in images)
+								{
+									var img = new MagickImage(I.Data)
+									{
+										AnimationDelay = (int)(state.FrameDelays[index++] * 10)
+									};
+									if (state.LoopCount.HasValue)
+										img.AnimationIterations = state.LoopCount.Value;
 
-				return results;
+									gifCreator.Add(img);
+								}
+
+								if (state.Rewind)
+								{
+									//add reverse order
+									bool skippedFirst = false;
+									foreach (var I in images.Reverse())
+									{
+										if (!skippedFirst)
+											skippedFirst = true;
+										else
+										{
+											var img = new MagickImage(I.Data)
+											{
+												AnimationDelay = (int)(state.FrameDelays[--index] * 10)
+											};
+											if (state.LoopCount.HasValue)
+												img.AnimationIterations = state.LoopCount.Value;
+
+											gifCreator.Add(img);
+										}
+									}
+								}
+
+								gifCreator.Optimize();
+								gifCreator.OptimizeTransparency();
+
+								var result = new Models.Image()
+								{
+									IsGif = true
+								};
+								using (var ms = new MemoryStream())
+								{
+									gifCreator.Write(ms, MagickFormat.Gif);
+									result.Data = ms.ToArray();
+								}
+								result.Sha1 = Hash(result.Data);
+								return result;
+							}
+						};
+
+						var frameSets = new List<List<Models.Image>>(
+							Enumerable.Range(0, state.Frames).Select(frame =>
+								new List<Models.Image>(
+									Enumerable.Range(0, state.Dirs).Select(x => GetNextFrameImage())
+							)));
+
+						//collected all dirs and frames
+						Models.Image final;
+						if (frameSets.Count == 1)
+							//static image, one dir
+							if (frameSets.First().Count == 1)
+								final = frameSets.First().First();
+							//static image, multiple dirs
+							else
+								final = GetSingleImageForDirs(frameSets.First());
+						//animated image, one dir
+						else if (frameSets.First().Count == 1)
+							final = CreateGifForFrames(frameSets.Select(x => x.First()));
+						//animated image, multiple dirs
+						else
+							final = CreateGifForFrames(frameSets.Select(x => GetSingleImageForDirs(x)));
+
+
+						if (bySha.TryGetValue(final.Sha1, out Models.Image olderOne))
+							final = olderOne;
+						else
+							bySha.Add(final.Sha1, final);
+
+						var name = state.Name;
+						if (results.ContainsKey(name))
+						{
+							var baseName = name;
+							int counter = 1;
+							do
+								name = String.Format(CultureInfo.InvariantCulture, "{0}-{1}", baseName, ++counter);
+							while (results.ContainsKey(name));
+						}
+						results.Add(name, final);
+					}
+
+					return results;
+				}
+			}
+			catch (ArgumentException)
+			{
+				//issue with greyscale pngs, convert and rerun
+				using (var ms = new MemoryStream())
+				{
+					stream.Seek(0, System.IO.SeekOrigin.Begin);
+					using (var magickImage = new MagickImage(stream))
+					{
+						magickImage.Alpha(AlphaOption.On);
+						magickImage.Write(ms, MagickFormat.Png);
+					}
+					return ExtractImages(dmi, ms);
+				}
 			}
 		}
 
