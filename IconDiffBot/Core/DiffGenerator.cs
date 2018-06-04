@@ -184,9 +184,10 @@ namespace IconDiffBot.Core
 		/// </summary>
 		/// <param name="dmi">The <see cref="Dmi"/></param>
 		/// <param name="stream">The <see cref="Stream"/> containing the <see cref="Dmi"/> data</param>
+		/// <param name="secondAttempt">If this is the second recursive call to this function</param>
 		/// <returns>A <see cref="Dictionary{TKey, TValue}"/> of <see cref="IconState.Name"/>s mapped to <see cref="Image"/>s given a <paramref name="dmi"/> and it's data <paramref name="stream"/></returns>
 		/// <remarks>This code is mostly derived from @lzimann's original icon procs here: https://github.com/Cyberboss/IconDiffBot-python/blob/277e0def44048987d601596b1794354f49dd7412/icons.py#L74 </remarks>
-		static Dictionary<string, Models.Image> ExtractImages(Dmi dmi, Stream stream)
+		static Dictionary<string, Models.Image> ExtractImages(Dmi dmi, Stream stream, bool secondAttempt)
 		{
 			if (dmi == null && stream == null)
 				return new Dictionary<string, Models.Image>();
@@ -350,16 +351,18 @@ namespace IconDiffBot.Core
 			}
 			catch (ArgumentException)
 			{
+				if (secondAttempt)
+					return null;
 				//issue with greyscale pngs, convert and rerun
 				using (var ms = new MemoryStream())
 				{
 					stream.Seek(0, System.IO.SeekOrigin.Begin);
 					using (var magickImage = new MagickImage(stream))
 					{
-						magickImage.Alpha(AlphaOption.On);
+						magickImage.Alpha(AlphaOption.Transparent);
 						magickImage.Write(ms, MagickFormat.Png);
 					}
-					return ExtractImages(dmi, ms);
+					return ExtractImages(dmi, ms, true);
 				}
 			}
 		}
@@ -373,8 +376,8 @@ namespace IconDiffBot.Core
 			var beforeDmi = BuildDmi(beforeString);
 			var afterDmi = BuildDmi(afterString);
 
-			var beforeDic = ExtractImages(beforeDmi, before);
-			var afterDic = ExtractImages(afterDmi, after);
+			var beforeDic = ExtractImages(beforeDmi, before, false);
+			var afterDic = ExtractImages(afterDmi, after, false);
 
 			var results = new List<IconDiff>();
 
