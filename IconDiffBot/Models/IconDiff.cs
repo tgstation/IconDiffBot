@@ -50,5 +50,11 @@ namespace IconDiffBot.Models
 		/// The after <see cref="Image"/>
 		/// </summary>
 		public Image After { get; set; }
+
+		/// <summary>
+		/// Any errors that occurred during the creating of the <see cref="IconDiff"/>
+		/// </summary>
+		[NotMapped]
+		public string Error { get; set; }
 	}
 }

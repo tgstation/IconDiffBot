@@ -352,16 +352,13 @@ namespace IconDiffBot.Core
 			catch (ArgumentException)
 			{
 				if (secondAttempt)
-					return null;
+					throw;
 				//issue with greyscale pngs, convert and rerun
 				using (var ms = new MemoryStream())
 				{
 					stream.Seek(0, System.IO.SeekOrigin.Begin);
 					using (var magickImage = new MagickImage(stream))
-					{
-						magickImage.Alpha(AlphaOption.Transparent);
-						magickImage.Write(ms, MagickFormat.Png);
-					}
+						magickImage.Write(ms, MagickFormat.Png32);
 					return ExtractImages(dmi, ms, true);
 				}
 			}
