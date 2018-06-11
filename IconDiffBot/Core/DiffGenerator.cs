@@ -281,8 +281,6 @@ namespace IconDiffBot.Core
 											{
 												AnimationDelay = (int)(state.FrameDelays[--index] * 10)
 											};
-											if (state.LoopCount.HasValue)
-												img.AnimationIterations = state.LoopCount.Value;
 
 											gifCreator.Add(img);
 										}
