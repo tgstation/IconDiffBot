@@ -30,6 +30,14 @@ namespace IconDiffBot.Core
 		/// The URL to direct user to report issues at
 		/// </summary>
 		const string IssueReportUrl = "https://github.com/tgstation/IconDiffBot/issues";
+		/// <summary>
+		/// Time to wait when GitHub 404's to retry a check run in milliseconds
+		/// </summary>
+		const int NotFoundRetryDelay = 10000;
+		/// <summary>
+		/// Number of retry attempts to make when GitHub 404's
+		/// </summary>
+		const int NotFoundRetryAttempts = 2;
 		
 		/// <summary>
 		/// The <see cref="GeneralConfiguration"/> for the <see cref="PayloadProcessor"/>
@@ -100,45 +108,44 @@ namespace IconDiffBot.Core
 		/// <returns>A <see cref="Task"/> representing the running operation</returns>
 		async Task ScanPullRequestImpl(long repositoryId, int pullRequestNumber, long installationId, IServiceScope scope, CancellationToken cancellationToken)
 		{
+			long? checkRunId = null;
+			PullRequest pullRequest = null;
+			Task<IReadOnlyList<PullRequestFile>> allChangedFilesTask = null;
 			var gitHubManager = scope.ServiceProvider.GetRequiredService<IGitHubManager>();
-			var pullRequest = await gitHubManager.GetPullRequest(repositoryId, installationId, pullRequestNumber, cancellationToken).ConfigureAwait(false);
-
-			logger.LogTrace("Repository is {0}/{1}", pullRequest.Base.Repository.Owner.Login, pullRequest.Base.Repository.Name);
-			logger.LogTrace("Pull Request: \"{0}\" by {1}", pullRequest.Title, pullRequest.User.Login);
-
-			var allChangedFilesTask = gitHubManager.GetPullRequestChangedFiles(pullRequest, installationId, cancellationToken);
-			var requestIdentifier = String.Concat(pullRequest.Base.Repository.Owner.Login, pullRequest.Base.Repository.Name, pullRequest.Number);
-
-			var ncr = new NewCheckRun
+			async Task RunCheck()
 			{
-				HeadSha = pullRequest.Head.Sha,
-				Name = String.Format(CultureInfo.InvariantCulture, "Diffs - Pull Request #{0}", pullRequest.Number),
-				StartedAt = DateTimeOffset.Now,
-				Status = CheckStatus.Queued
-			};
+				if (pullRequest == null)
+				{
+					pullRequest = await gitHubManager.GetPullRequest(repositoryId, installationId, pullRequestNumber, cancellationToken).ConfigureAwait(false);
+					logger.LogTrace("Repository is {0}/{1}", pullRequest.Base.Repository.Owner.Login, pullRequest.Base.Repository.Name);
+					logger.LogTrace("Pull Request: \"{0}\" by {1}", pullRequest.Title, pullRequest.User.Login);
+				}
 
-			if (pullRequest.Head.Repository.Id == repositoryId)
-				ncr.HeadBranch = pullRequest.Head.Ref;
+				if(allChangedFilesTask == null || allChangedFilesTask.IsFaulted)
+					allChangedFilesTask = gitHubManager.GetPullRequestChangedFiles(pullRequest, installationId, cancellationToken);
 
-			var checkRunId = await gitHubManager.CreateCheckRun(repositoryId, installationId, ncr, cancellationToken).ConfigureAwait(false);
+				if (!checkRunId.HasValue)
+				{
+					var ncr = new NewCheckRun
+					{
+						HeadSha = pullRequest.Head.Sha,
+						Name = String.Format(CultureInfo.InvariantCulture, "Diffs - Pull Request #{0}", pullRequest.Number),
+						StartedAt = DateTimeOffset.Now,
+						Status = CheckStatus.Queued
+					};
 
-			Task HandleCancel() => gitHubManager.UpdateCheckRun(repositoryId, installationId, checkRunId, new CheckRunUpdate
-			{
-				CompletedAt = DateTimeOffset.Now,
-				Status = CheckStatus.Completed,
-				Conclusion = CheckConclusion.Neutral,
-				Output = new CheckRunOutput(stringLocalizer["Operation Cancelled"], stringLocalizer["The operation was cancelled on the server, most likely due to app shutdown. You may attempt re-running it."], null, null, null)
-			}, default);
+					if (pullRequest.Head.Repository.Id == repositoryId)
+						ncr.HeadBranch = pullRequest.Head.Ref;
+					checkRunId = await gitHubManager.CreateCheckRun(repositoryId, installationId, ncr, cancellationToken).ConfigureAwait(false);
+				}
 
-			try
-			{
 				var allChangedFiles = await allChangedFilesTask.ConfigureAwait(false);
 				var changedDmis = allChangedFiles.Where(x => x.FileName.EndsWith(".dmi", StringComparison.InvariantCultureIgnoreCase)).ToList();
 				if (changedDmis.Count == 0)
 				{
 					logger.LogDebug("Pull request has no changed .dmis, exiting");
 
-					await gitHubManager.UpdateCheckRun(repositoryId, installationId, checkRunId, new CheckRunUpdate
+					await gitHubManager.UpdateCheckRun(repositoryId, installationId, checkRunId.Value, new CheckRunUpdate
 					{
 						CompletedAt = DateTimeOffset.Now,
 						Status = CheckStatus.Completed,
@@ -150,37 +157,64 @@ namespace IconDiffBot.Core
 
 				logger.LogTrace("Pull request has icon changes, creating check run");
 
-				await GenerateDiffs(pullRequest, installationId, checkRunId, changedDmis, scope, cancellationToken).ConfigureAwait(false);
+				await GenerateDiffs(pullRequest, installationId, checkRunId.Value, changedDmis, scope, cancellationToken).ConfigureAwait(false);
+			};
+			
+			try
+			{
+				try
+				{
+					for (var I = 0; I <= NotFoundRetryAttempts; ++I)
+						try
+						{
+							await RunCheck().ConfigureAwait(false);
+							break;
+						}
+						catch (NotFoundException)
+						{
+							//chance for spurious github failures
+							if (I == NotFoundRetryAttempts)
+								throw;
+							await Task.Delay(NotFoundRetryDelay, cancellationToken).ConfigureAwait(false);
+						}
+				}
+				catch (OperationCanceledException)
+				{
+					throw;
+				}
+				catch (Exception e)
+				{
+					if (!checkRunId.HasValue)
+						throw;
+					logger.LogDebug(e, "Error occurred. Attempting to post debug comment");
+					try
+					{
+						await gitHubManager.UpdateCheckRun(repositoryId, installationId, checkRunId.Value, new CheckRunUpdate
+						{
+							CompletedAt = DateTimeOffset.Now,
+							Status = CheckStatus.Completed,
+							Conclusion = CheckConclusion.Failure,
+							Output = new CheckRunOutput(stringLocalizer["Error generating diffs!"], stringLocalizer["Exception details:\n\n```\n{0}\n```\n\nPlease report this [here]({1})", e.ToString(), IssueReportUrl], null, null, null)
+						}, default).ConfigureAwait(false);
+					}
+					catch (Exception innerException)
+					{
+						throw new AggregateException(innerException, e);
+					}
+				}
 			}
 			catch (OperationCanceledException)
 			{
 				logger.LogTrace("Operation cancelled");
-
-				await HandleCancel().ConfigureAwait(false);
-			}
-			catch (Exception e)
-			{
-				logger.LogDebug(e, "Error occurred. Attempting to post debug comment");
-				try
-				{
-					await gitHubManager.UpdateCheckRun(repositoryId, installationId, checkRunId, new CheckRunUpdate
-					{
-						CompletedAt = DateTimeOffset.Now,
-						Status = CheckStatus.Completed,
-						Conclusion = CheckConclusion.Failure,
-						Output = new CheckRunOutput(stringLocalizer["Error generating diffs!"], stringLocalizer["Exception details:\n\n```\n{0}\n```\n\nPlease report this [here]({1})", e.ToString(), IssueReportUrl], null, null, null)
-					}, default).ConfigureAwait(false);
+				if (!checkRunId.HasValue)
 					throw;
-				}
-				catch (OperationCanceledException)
+				await gitHubManager.UpdateCheckRun(repositoryId, installationId, checkRunId.Value, new CheckRunUpdate
 				{
-					logger.LogTrace("Operation cancelled");
-					await HandleCancel().ConfigureAwait(false);
-				}
-				catch (Exception innerException)
-				{
-					throw new AggregateException(innerException, e);
-				}
+					CompletedAt = DateTimeOffset.Now,
+					Status = CheckStatus.Completed,
+					Conclusion = CheckConclusion.Neutral,
+					Output = new CheckRunOutput(stringLocalizer["Operation Cancelled"], stringLocalizer["The operation was cancelled on the server, most likely due to app shutdown. You may attempt re-running it."], null, null, null)
+				}, default).ConfigureAwait(false);
 			}
 		}
 
