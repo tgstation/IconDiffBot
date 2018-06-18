@@ -29,7 +29,7 @@ namespace IconDiffBot.Core
 				return null;
 			var metadata = ImageMetadataReader.ReadMetadata(stream);
 			const string DmiHeader = "# BEGIN DMI";
-			var description = metadata.SelectMany(x => x.Tags).First(x => x.Description.Contains(DmiHeader)).Description;
+			var description = metadata.SelectMany(x => x.Tags).Select(x => x.Description).First(x => x != null && x.Contains(DmiHeader));
 			var startIndex = description.IndexOf(DmiHeader, StringComparison.InvariantCulture) + DmiHeader.Length;
 			var length = description.IndexOf("# END DMI", StringComparison.InvariantCulture) - startIndex;
 			return description.Substring(startIndex, length);
