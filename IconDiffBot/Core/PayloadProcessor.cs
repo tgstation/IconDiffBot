@@ -320,7 +320,8 @@ namespace IconDiffBot.Core
 
 				var databaseContext = scope.ServiceProvider.GetRequiredService<IDatabaseContext>();
 				//decide whether to attach or add images
-				var dbImages = await databaseContext.Images.Where(x => finalImageDictionary.Any(y => y.Key == x.Sha1)).Select(x => new Image
+				var keysToSearch = finalImageDictionary.Keys;
+				var dbImages = await databaseContext.Images.Where(x => keysToSearch.Contains(x.Sha1)).Select(x => new Image
 				{
 					Id = x.Id,
 					Sha1 = x.Sha1
