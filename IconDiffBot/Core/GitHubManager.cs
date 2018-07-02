@@ -138,7 +138,13 @@ namespace IconDiffBot.Core
 
 			//first get the directory
 			var dir = Path.GetDirectoryName(filePath);
-			var dirInfo = await client.Repository.Content.GetAllContentsByRef(repositoryId, dir, commit).ConfigureAwait(false);
+			Task<IReadOnlyList<RepositoryContent>> result;
+			if (dir.Length == 0)    //root
+				result = client.Repository.Content.GetAllContentsByRef(repositoryId, commit);
+			else
+				result = client.Repository.Content.GetAllContentsByRef(repositoryId, dir, commit);
+
+			var dirInfo = await result.ConfigureAwait(false);
 			var theDroid = dirInfo.Where(x => x.Path == filePath).First();
 			//use git api to get the file
 			var file = await client.Git.Blob.Get(repositoryId, theDroid.Sha).ConfigureAwait(false);
