@@ -410,13 +410,11 @@ namespace IconDiffBot.Core
 				});
 			}
 
-			foreach(var I in afterDic)
-				//everything here is new
-				results.Add(new IconDiff
-				{
-					After = I.Value,
-					StateName = I.Key
-				});
+			results.AddRange(afterDic.Select(x => new IconDiff
+			{
+				After = x.Value,
+				StateName = x.Key
+			}));
 
 			return results;
 		}
