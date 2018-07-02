@@ -29,7 +29,9 @@ namespace IconDiffBot.Core
 				return null;
 			var metadata = ImageMetadataReader.ReadMetadata(stream);
 			const string DmiHeader = "# BEGIN DMI";
-			var description = metadata.SelectMany(x => x.Tags).Select(x => x.Description).First(x => x != null && x.Contains(DmiHeader));
+			var description = metadata.SelectMany(x => x.Tags).Select(x => x.Description).FirstOrDefault(x => x != null && x.Contains(DmiHeader));
+			if (description == default)
+				return null;
 			var startIndex = description.IndexOf(DmiHeader, StringComparison.InvariantCulture) + DmiHeader.Length;
 			var length = description.IndexOf("# END DMI", StringComparison.InvariantCulture) - startIndex;
 			return description.Substring(startIndex, length);
@@ -189,8 +191,15 @@ namespace IconDiffBot.Core
 		/// <remarks>This code is mostly derived from @lzimann's original icon procs here: https://github.com/Cyberboss/IconDiffBot-python/blob/277e0def44048987d601596b1794354f49dd7412/icons.py#L74 </remarks>
 		static Dictionary<string, Models.Image> ExtractImages(Dmi dmi, Stream stream, bool secondAttempt)
 		{
-			if (dmi == null && stream == null)
-				return new Dictionary<string, Models.Image>();
+			if (dmi == null)
+			{
+				var result = new Dictionary<string, Models.Image>();
+				if (stream != null)
+					//dmi without metadata
+					using (var img = new Bitmap(stream))
+						result.Add(String.Empty, ImageToModel(img));
+				return result;
+			}
 
 			Rectangle DmiRect() => new Rectangle
 			{
