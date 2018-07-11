@@ -351,7 +351,7 @@ namespace IconDiffBot.Core
 		/// <param name="checkRunId">The <see cref="CheckRun.Id"/></param>
 		/// <param name="diffResults">The <see cref="IconDiff"/>s</param>
 		/// <param name="scope">The <see cref="IServiceScope"/> for the operation</param>
-		/// <param name="databaseContext">The <see cref="IDatabaseContext"/> for the operation</param>
+		/// <param name="databaseContext">The <see cref="IDatabaseContext"/> for the operation if any</param>
 		/// <param name="cancellationToken">The <see cref="CancellationToken"/> for the operation</param>
 		/// <returns>A <see cref="Task"/> representing the running operation</returns>
 		async Task HandleResults(PullRequest pullRequest, long installationId, long checkRunId, List<IconDiff> diffResults, IServiceScope scope, IDatabaseContext databaseContext, CancellationToken cancellationToken)
@@ -376,7 +376,7 @@ namespace IconDiffBot.Core
 					dic.Add(I.DmiPath, list);
 				}
 				list.Add(I);
-				if(I.Before != null || I.After != null)
+				if(databaseContext != null && (I.Before != null || I.After != null))
 					databaseContext.IconDiffs.Add(I);
 			}
 
@@ -423,9 +423,43 @@ namespace IconDiffBot.Core
 				stringLocalizer["Please report any issues [here]({0}).", IssueReportUrl]
 			);
 
-			logger.LogTrace("Committing new IconDiffs to the database...");
-			await databaseContext.Save(cancellationToken).ConfigureAwait(false);
+
+			if (databaseContext != null) {
+				logger.LogTrace("Committing new IconDiffs to the database...");
+				await databaseContext.Save(cancellationToken).ConfigureAwait(false);
+			}
+
 			logger.LogTrace("Finalizing GitHub Check...");
+
+			var ghm = scope.ServiceProvider.GetRequiredService<IGitHubManager>();
+
+			if (comment.Length > 65535) //arbitrary github limit
+			{
+				if (diffResults.Count > 1)  //come on dude
+				{
+					logger.LogInformation("Comment too large, employing breakdown procedure.");
+					var cutoff = diffResults.Count / 2;
+					var set1 = new List<IconDiff>();
+					var set2 = new List<IconDiff>();
+					for (var I = 0; I < diffResults.Count; ++I)
+						(I < cutoff ? set1 : set2).Add(diffResults[I]);
+
+					var firstCR = HandleResults(pullRequest, installationId, checkRunId, set1, scope, null, cancellationToken);
+					var nextCheckRunId = await ghm.CreateCheckRun(pullRequest.Base.Repository.Id, installationId, new NewCheckRun
+					{
+						StartedAt = DateTimeOffset.Now,
+						HeadSha = pullRequest.Head.Sha,
+						Name = stringLocalizer["Additional Diffs - Pull Request #{0} - Set Base: {1}", pullRequest.Number, set2.First().DmiPath],
+						Status = CheckStatus.InProgress
+					}, cancellationToken).ConfigureAwait(false);
+					await HandleResults(pullRequest, installationId, nextCheckRunId, set2, scope, null, cancellationToken).ConfigureAwait(false);
+					await firstCR.ConfigureAwait(false);
+					return;
+				}
+				var iPath = diffResults.First().DmiPath;
+				logger.LogWarning("Unable to post check run for icon {0}!", iPath);
+				comment = stringLocalizer["Unable to render this icon ({0}) due to limitations on github check run output!", iPath];
+			}
 
 			var ncr = new CheckRunUpdate
 			{
@@ -434,7 +468,7 @@ namespace IconDiffBot.Core
 				Output = new CheckRunOutput(stringLocalizer["Icon Diffs"], stringLocalizer["Icons with diff:"], comment, null, outputImages),
 				Conclusion = CheckConclusion.Success
 			};
-			await scope.ServiceProvider.GetRequiredService<IGitHubManager>().UpdateCheckRun(pullRequest.Base.Repository.Id, installationId, checkRunId, ncr, cancellationToken).ConfigureAwait(false);
+			await ghm.UpdateCheckRun(pullRequest.Base.Repository.Id, installationId, checkRunId, ncr, cancellationToken).ConfigureAwait(false);
 		}
 
 		/// <summary>
