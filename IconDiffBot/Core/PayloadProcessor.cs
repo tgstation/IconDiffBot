@@ -353,10 +353,14 @@ namespace IconDiffBot.Core
 		/// <param name="scope">The <see cref="IServiceScope"/> for the operation</param>
 		/// <param name="databaseContext">The <see cref="IDatabaseContext"/> for the operation if any</param>
 		/// <param name="cancellationToken">The <see cref="CancellationToken"/> for the operation</param>
+		/// <param name="navigationCheckRunId">The check run id to use for URLs when linking files</param>
 		/// <returns>A <see cref="Task"/> representing the running operation</returns>
-		async Task HandleResults(PullRequest pullRequest, long installationId, long checkRunId, List<IconDiff> diffResults, IServiceScope scope, IDatabaseContext databaseContext, CancellationToken cancellationToken)
+		async Task HandleResults(PullRequest pullRequest, long installationId, long checkRunId, List<IconDiff> diffResults, IServiceScope scope, IDatabaseContext databaseContext, CancellationToken cancellationToken, long? navigationCheckRunId = null)
 		{			
 			logger.LogTrace("Generating check run output and preparing database query...");
+
+			if (!navigationCheckRunId.HasValue)
+				navigationCheckRunId = checkRunId;
 
 			var outputImages = new List<CheckRunImage>()
 			{
@@ -394,8 +398,8 @@ namespace IconDiffBot.Core
 				
 				foreach(var I in kv.Value)
 				{
-					var beforeUrl = String.Concat(prefix, FilesController.RouteTo(pullRequest.Base.Repository, checkRunId, I.FileId, true, (I.Before ?? I.After)?.IsGif ?? false));
-					var afterUrl = String.Concat(prefix, FilesController.RouteTo(pullRequest.Base.Repository, checkRunId, I.FileId, false, (I.After ?? I.Before)?.IsGif ?? false));
+					var beforeUrl = String.Concat(prefix, FilesController.RouteTo(pullRequest.Base.Repository, navigationCheckRunId, I.FileId, true, (I.Before ?? I.After)?.IsGif ?? false));
+					var afterUrl = String.Concat(prefix, FilesController.RouteTo(pullRequest.Base.Repository, navigationCheckRunId, I.FileId, false, (I.After ?? I.Before)?.IsGif ?? false));
 
 					string status;
 					if (I.Before == null && I.After == null)
@@ -444,7 +448,7 @@ namespace IconDiffBot.Core
 					for (var I = 0; I < diffResults.Count; ++I)
 						(I < cutoff ? set1 : set2).Add(diffResults[I]);
 
-					var firstCR = HandleResults(pullRequest, installationId, checkRunId, set1, scope, null, cancellationToken);
+					var firstCR = HandleResults(pullRequest, installationId, checkRunId, set1, scope, null, cancellationToken, navigationCheckRunId ?? checkRunId);
 					var nextCheckRunId = await ghm.CreateCheckRun(pullRequest.Base.Repository.Id, installationId, new NewCheckRun
 					{
 						StartedAt = DateTimeOffset.Now,
@@ -452,7 +456,7 @@ namespace IconDiffBot.Core
 						Name = stringLocalizer["Additional Diffs - Pull Request #{0} - Set Base: {1}", pullRequest.Number, set2.First().DmiPath],
 						Status = CheckStatus.InProgress
 					}, cancellationToken).ConfigureAwait(false);
-					await HandleResults(pullRequest, installationId, nextCheckRunId, set2, scope, null, cancellationToken).ConfigureAwait(false);
+					await HandleResults(pullRequest, installationId, nextCheckRunId, set2, scope, null, cancellationToken, navigationCheckRunId ?? checkRunId).ConfigureAwait(false);
 					await firstCR.ConfigureAwait(false);
 					return;
 				}
