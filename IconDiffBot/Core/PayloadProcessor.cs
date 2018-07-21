@@ -126,16 +126,12 @@ namespace IconDiffBot.Core
 
 				if (!checkRunId.HasValue)
 				{
-					var ncr = new NewCheckRun
+					var ncr = new NewCheckRun(String.Format(CultureInfo.InvariantCulture, "Diffs - Pull Request #{0}", pullRequest.Number), pullRequest.Head.Sha)
 					{
-						HeadSha = pullRequest.Head.Sha,
-						Name = String.Format(CultureInfo.InvariantCulture, "Diffs - Pull Request #{0}", pullRequest.Number),
 						StartedAt = DateTimeOffset.Now,
 						Status = CheckStatus.Queued
 					};
-
-					if (pullRequest.Head.Repository.Id == repositoryId)
-						ncr.HeadBranch = pullRequest.Head.Ref;
+					
 					checkRunId = await gitHubManager.CreateCheckRun(repositoryId, installationId, ncr, cancellationToken).ConfigureAwait(false);
 				}
 
@@ -150,7 +146,7 @@ namespace IconDiffBot.Core
 						CompletedAt = DateTimeOffset.Now,
 						Status = CheckStatus.Completed,
 						Conclusion = CheckConclusion.Neutral,
-						Output = new CheckRunOutput(stringLocalizer["No Modified Icons"], stringLocalizer["No modified .dmi files were detected in this pull request"], null, null, null)
+						Output = new NewCheckRunOutput(stringLocalizer["No Modified Icons"], stringLocalizer["No modified .dmi files were detected in this pull request"])
 					}, cancellationToken).ConfigureAwait(false);
 					return;
 				}
@@ -194,7 +190,7 @@ namespace IconDiffBot.Core
 							CompletedAt = DateTimeOffset.Now,
 							Status = CheckStatus.Completed,
 							Conclusion = CheckConclusion.Failure,
-							Output = new CheckRunOutput(stringLocalizer["Error generating diffs!"], stringLocalizer["Exception details:\n\n```\n{0}\n```\n\nPlease report this [here]({1})", e.ToString(), IssueReportUrl], null, null, null)
+							Output = new NewCheckRunOutput(stringLocalizer["Error generating diffs!"], stringLocalizer["Exception details:\n\n```\n{0}\n```\n\nPlease report this [here]({1})", e.ToString(), IssueReportUrl])
 						}, default).ConfigureAwait(false);
 					}
 					catch (Exception innerException)
@@ -213,7 +209,7 @@ namespace IconDiffBot.Core
 					CompletedAt = DateTimeOffset.Now,
 					Status = CheckStatus.Completed,
 					Conclusion = CheckConclusion.Neutral,
-					Output = new CheckRunOutput(stringLocalizer["Operation Cancelled"], stringLocalizer["The operation was cancelled on the server, most likely due to app shutdown. You may attempt re-running it."], null, null, null)
+					Output = new NewCheckRunOutput(stringLocalizer["Operation Cancelled"], stringLocalizer["The operation was cancelled on the server, most likely due to app shutdown. You may attempt re-running it."])
 				}, default).ConfigureAwait(false);
 			}
 		}
@@ -236,7 +232,7 @@ namespace IconDiffBot.Core
 				var checkRunDequeueUpdate = gitHubManager.UpdateCheckRun(pullRequest.Base.Repository.Id, installationId, checkRunId, new CheckRunUpdate
 				{
 					Status = CheckStatus.InProgress,
-					Output = new CheckRunOutput(stringLocalizer["Generating Diffs"], stringLocalizer["Aww geez rick, I should eventually put some progress message here"], null, null, null),
+					Output = new NewCheckRunOutput(stringLocalizer["Generating Diffs"], stringLocalizer["Aww geez rick, I should eventually put some progress message here"]),
 				}, cancellationToken);
 
 				var results = new List<IconDiff>();
@@ -357,12 +353,7 @@ namespace IconDiffBot.Core
 		async Task HandleResults(PullRequest pullRequest, long installationId, long checkRunId, List<IconDiff> diffResults, IServiceScope scope, IDatabaseContext databaseContext, CancellationToken cancellationToken)
 		{			
 			logger.LogTrace("Generating check run output and preparing database query...");
-
-			var outputImages = new List<CheckRunImage>()
-			{
-				Capacity = diffResults.Count
-			};
-
+			
 			var prefix = generalConfiguration.ApplicationPrefix;
 			var commentBuilder = new StringBuilder();
 
@@ -445,11 +436,9 @@ namespace IconDiffBot.Core
 						(I < cutoff ? set1 : set2).Add(diffResults[I]);
 
 					var firstCR = HandleResults(pullRequest, installationId, checkRunId, set1, scope, null, cancellationToken);
-					var nextCheckRunId = await ghm.CreateCheckRun(pullRequest.Base.Repository.Id, installationId, new NewCheckRun
+					var nextCheckRunId = await ghm.CreateCheckRun(pullRequest.Base.Repository.Id, installationId, new NewCheckRun(stringLocalizer["Additional Diffs - Pull Request #{0} - Set Base: {1}", pullRequest.Number, set2.First().DmiPath], pullRequest.Head.Sha)
 					{
 						StartedAt = DateTimeOffset.Now,
-						HeadSha = pullRequest.Head.Sha,
-						Name = stringLocalizer["Additional Diffs - Pull Request #{0} - Set Base: {1}", pullRequest.Number, set2.First().DmiPath],
 						Status = CheckStatus.InProgress
 					}, cancellationToken).ConfigureAwait(false);
 					await HandleResults(pullRequest, installationId, nextCheckRunId, set2, scope, null, cancellationToken).ConfigureAwait(false);
@@ -465,7 +454,10 @@ namespace IconDiffBot.Core
 			{
 				Status = CheckStatus.Completed,
 				CompletedAt = DateTimeOffset.Now,
-				Output = new CheckRunOutput(stringLocalizer["Icon Diffs"], stringLocalizer["Icons with diff:"], comment, null, outputImages),
+				Output = new NewCheckRunOutput(stringLocalizer["Icon Diffs"], stringLocalizer["Icons with diff:"])
+				{
+					Text = comment
+				},
 				Conclusion = CheckConclusion.Success
 			};
 			await ghm.UpdateCheckRun(pullRequest.Base.Repository.Id, installationId, checkRunId, ncr, cancellationToken).ConfigureAwait(false);
@@ -478,22 +470,18 @@ namespace IconDiffBot.Core
 		/// <param name="installationId">The <see cref="InstallationId.Id"/></param>
 		/// <param name="gitHubManager">The <see cref="IGitHubManager"/> for the operation</param>
 		/// <param name="checkSuiteSha">The <see cref="CheckSuite.HeadSha"/></param>
-		/// <param name="checkSuiteBranch">The <see cref="CheckSuite.HeadBranch"/></param>
 		/// <param name="cancellationToken">The <see cref="CancellationToken"/> for the operation</param>
 		/// <returns>A <see cref="Task"/> representing the running operation</returns>
-		async Task CreateUnassociatedCheck(long repositoryId, long installationId, IGitHubManager gitHubManager, string checkSuiteSha, string checkSuiteBranch, CancellationToken cancellationToken)
+		async Task CreateUnassociatedCheck(long repositoryId, long installationId, IGitHubManager gitHubManager, string checkSuiteSha, CancellationToken cancellationToken)
 		{
 			var now = DateTimeOffset.Now;
 			var nmc = stringLocalizer["No Associated Pull Request"];
-			await gitHubManager.CreateCheckRun(repositoryId, installationId, new NewCheckRun
+			await gitHubManager.CreateCheckRun(repositoryId, installationId, new NewCheckRun(nmc, checkSuiteSha)
 			{
 				CompletedAt = now,
 				StartedAt = now,
 				Conclusion = CheckConclusion.Neutral,
-				HeadSha = checkSuiteSha,
-				HeadBranch = checkSuiteBranch,
-				Name = nmc,
-				Output = new CheckRunOutput(nmc, String.Empty, null, null, null),
+				Output = new NewCheckRunOutput(nmc, String.Empty),
 				Status = CheckStatus.Completed
 			}, cancellationToken).ConfigureAwait(false);
 		}
@@ -505,11 +493,10 @@ namespace IconDiffBot.Core
 		/// <param name="installationId">The <see cref="InstallationId.Id"/></param>
 		/// <param name="checkSuiteId">The <see cref="CheckSuite.Id"/></param>
 		/// <param name="checkSuiteSha">The <see cref="CheckSuite.HeadSha"/></param>
-		/// <param name="checkSuiteBranch">The <see cref="CheckSuite.HeadBranch"/></param>
 		/// <param name="jobCancellationToken">The <see cref="IJobCancellationToken"/> for the operation</param>
 		/// <returns>A <see cref="Task"/> representing the running operation</returns>
 		[AutomaticRetry(Attempts = 0)]
-		public async Task ScanCheckSuite(long repositoryId, long installationId, long checkSuiteId, string checkSuiteSha, string checkSuiteBranch, IJobCancellationToken jobCancellationToken)
+		public async Task ScanCheckSuite(long repositoryId, long installationId, long checkSuiteId, string checkSuiteSha, IJobCancellationToken jobCancellationToken)
 		{
 			using (logger.BeginScope("Scanning check suite {0} for repository {1}. Sha: ", checkSuiteId, repositoryId, checkSuiteSha))
 			using (var scope = serviceProvider.CreateScope())
@@ -531,7 +518,7 @@ namespace IconDiffBot.Core
 				})).ConfigureAwait(false);
 
 				if (!testedAny)
-					await CreateUnassociatedCheck(repositoryId, installationId, gitHubManager, checkSuiteSha, checkSuiteBranch, cancellationToken).ConfigureAwait(false);
+					await CreateUnassociatedCheck(repositoryId, installationId, gitHubManager, checkSuiteSha, cancellationToken).ConfigureAwait(false);
 			}
 		}
 
@@ -566,7 +553,7 @@ namespace IconDiffBot.Core
 				return;
 
 			//don't rely on CheckSuite.PullRequests, it doesn't include PRs from forks.
-			backgroundJobClient.Enqueue(() => ScanCheckSuite(payload.Repository.Id, payload.Installation.Id, payload.CheckSuite.Id, payload.CheckSuite.HeadSha, payload.CheckSuite.HeadBranch, JobCancellationToken.Null));
+			backgroundJobClient.Enqueue(() => ScanCheckSuite(payload.Repository.Id, payload.Installation.Id, payload.CheckSuite.Id, payload.CheckSuite.HeadSha, JobCancellationToken.Null));
 		}        
 
 		/// <inheritdoc />
@@ -578,7 +565,7 @@ namespace IconDiffBot.Core
 			if (prNumber.HasValue)
 				backgroundJobClient.Enqueue(() => ScanPullRequest(payload.Repository.Id, prNumber.Value, payload.Installation.Id, JobCancellationToken.Null));
 			else
-				await CreateUnassociatedCheck(payload.Repository.Id, payload.Installation.Id, gitHubManager, payload.CheckRun.CheckSuite.HeadSha, payload.CheckRun.CheckSuite.HeadBranch, cancellationToken).ConfigureAwait(false);
+				await CreateUnassociatedCheck(payload.Repository.Id, payload.Installation.Id, gitHubManager, payload.CheckRun.CheckSuite.HeadSha, cancellationToken).ConfigureAwait(false);
 		}
 	}
 }
