@@ -395,7 +395,7 @@ namespace IconDiffBot.Core
 						status = stringLocalizer[I.Before == null ? "Created" : I.After == null ? "Deleted" : "Modified"];
 
 					commentBuilder.Append(String.Format(CultureInfo.InvariantCulture,
-						"{0}{1} | ![]({2}) | ![]({3}) | {4}",
+						"{0}`{1}` | ![]({2}) | ![]({3}) | {4}",
 						Environment.NewLine,
 						I.StateName,
 						beforeUrl,
