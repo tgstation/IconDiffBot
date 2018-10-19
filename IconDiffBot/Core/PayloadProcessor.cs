@@ -401,7 +401,7 @@ namespace IconDiffBot.Core
 					commentBuilder.Append(String.Format(CultureInfo.InvariantCulture,
 						"{0}{1} | ![]({2}) | ![]({3}) | {4}",
 						Environment.NewLine,
-						I.StateName,
+						stateName,
 						beforeUrl,
 						afterUrl,
 						status
