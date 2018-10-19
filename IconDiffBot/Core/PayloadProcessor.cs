@@ -394,6 +394,10 @@ namespace IconDiffBot.Core
 					else
 						status = stringLocalizer[I.Before == null ? "Created" : I.After == null ? "Deleted" : "Modified"];
 
+					var stateName = I.StateName;
+					if (stateName.Length == 0)
+						stateName = "(Default State)";
+
 					commentBuilder.Append(String.Format(CultureInfo.InvariantCulture,
 						"{0}{1} | ![]({2}) | ![]({3}) | {4}",
 						Environment.NewLine,
