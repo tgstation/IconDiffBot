@@ -78,7 +78,7 @@ namespace IconDiffBot.Models
 		protected override void OnConfiguring(DbContextOptionsBuilder optionsBuilder)
 		{
 			if (databaseConfiguration.IsMySQL)
-				optionsBuilder.UseMySQL(databaseConfiguration.ConnectionString);
+				optionsBuilder.UseMySql(databaseConfiguration.ConnectionString);
 			else
 				optionsBuilder.UseSqlServer(databaseConfiguration.ConnectionString);
 			optionsBuilder.UseLoggerFactory(loggerFactory);

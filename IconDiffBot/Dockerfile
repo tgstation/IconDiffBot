@@ -1,4 +1,4 @@
-FROM microsoft/aspnetcore-build AS build
+FROM microsoft/dotnet:2.1-sdk AS build
 
 WORKDIR /src/IconDiffBot
 COPY IconDiffBot/IconDiffBot.csproj .
@@ -9,7 +9,7 @@ RUN dotnet build -c Docker
 
 RUN dotnet publish -c Docker -o /app && cp entrypoint.sh /app/
 
-FROM microsoft/aspnetcore AS base
+FROM microsoft/dotnet:2.1-aspnetcore-runtime AS base
 
 EXPOSE 80
 
