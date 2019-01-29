@@ -29,7 +29,7 @@ namespace IconDiffBot.Core
 				return null;
 			var metadata = ImageMetadataReader.ReadMetadata(stream);
 			const string DmiHeader = "# BEGIN DMI";
-			var description = metadata.SelectMany(x => x.Tags).Select(x => x.Description).FirstOrDefault(x => x != null && x.Contains(DmiHeader));
+			var description = metadata.SelectMany(x => x.Tags).Select(x => x.Description).FirstOrDefault(x => x != null && x.Contains(DmiHeader, StringComparison.Ordinal));
 			if (description == default)
 				return null;
 			var startIndex = description.IndexOf(DmiHeader, StringComparison.InvariantCulture) + DmiHeader.Length;
@@ -57,7 +57,7 @@ namespace IconDiffBot.Core
 			{
 				if (String.IsNullOrWhiteSpace(I))
 					continue;
-				var index = I.IndexOf('=');
+				var index = I.IndexOf('=', StringComparison.Ordinal);
 				var key = I.Substring(0, index).Trim();
 				var ip1 = index + 1;
 				var value = I.Substring(ip1, I.Length - ip1).Trim();

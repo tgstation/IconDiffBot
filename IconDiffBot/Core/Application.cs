@@ -4,7 +4,6 @@ using Hangfire.MySql;
 using Hangfire.SqlServer;
 using IconDiffBot.Configuration;
 using IconDiffBot.Models;
-using Microsoft.ApplicationInsights.Extensibility;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.Extensions.Configuration;
@@ -93,9 +92,6 @@ namespace IconDiffBot.Core
 				throw new ArgumentNullException(nameof(applicationLifetime));
 			if (databaseContext == null)
 				throw new ArgumentNullException(nameof(databaseContext));
-
-			//prevent telemetry from polluting the debug log
-			TelemetryConfiguration.Active.DisableTelemetry = true;
 			
 			databaseContext.Initialize(applicationLifetime.ApplicationStopping).GetAwaiter().GetResult();
 
