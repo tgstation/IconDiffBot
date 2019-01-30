@@ -404,7 +404,9 @@ namespace IconDiffBot.Core
 						status = stringLocalizer[I.Before == null ? "Created" : I.After == null ? "Deleted" : "Modified"];
 
 					var stateName = I.StateName;
-					if (stateName.Length == 0)
+					if (stateName == null)
+						stateName = "(Empty Icon File)";
+					else if (stateName.Length == 0)
 						stateName = "(Default State)";
 
 					commentBuilder.Append(String.Format(CultureInfo.InvariantCulture,
