@@ -64,7 +64,7 @@ namespace IconDiffBot.Controllers
 		/// <param name="cancellationToken">The <see cref="CancellationToken"/> for the operation</param>
 		/// <returns>A <see cref="Task{TResult}"/> resulting in the <see cref="IActionResult"/> of the operation</returns>
 		[HttpGet("{repositoryId}/{checkRunId}/{fileId}/{beforeOrAfter}.{postfix}")]
-		[ResponseCache(VaryByHeader = "User-Agent", Duration = 60)]
+		[ResponseCache(Duration = Int32.MaxValue)]
 		public async Task<IActionResult> HandleIconGet(long repositoryId, long checkRunId, int fileId, string beforeOrAfter, string postfix, CancellationToken cancellationToken)
 		{
 			if (beforeOrAfter == null)

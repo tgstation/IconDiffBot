@@ -76,7 +76,7 @@ namespace IconDiffBot.Core
 
 			//do a discovery
 			var client = gitHubClientFactory.CreateAppClient();
-			var newInstallation = await client.GitHubApps.GetInstallation(installationId).ConfigureAwait(false);
+			var newInstallation = await client.GitHubApps.GetInstallationForCurrent(installationId).ConfigureAwait(false);
 			var installationToken = await client.GitHubApps.CreateInstallationToken(newInstallation.Id).ConfigureAwait(false);
 			var entity = new Models.Installation
 			{
@@ -155,7 +155,7 @@ namespace IconDiffBot.Core
 		public async Task<IEnumerable<CheckRun>> GetMatchingCheckRuns(long repositoryId, long installationId, long checkSuiteId, CancellationToken cancellationToken)
 		{
 			var client = await CreateInstallationClient(installationId, cancellationToken).ConfigureAwait(false);
-			return await client.Check.Run.GetAllForCheckSuite(repositoryId, checkSuiteId).ConfigureAwait(false);
+			return (await client.Check.Run.GetAllForCheckSuite(repositoryId, checkSuiteId).ConfigureAwait(false)).CheckRuns;
 		}
 	}
 }
