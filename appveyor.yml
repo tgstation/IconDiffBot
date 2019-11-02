@@ -18,7 +18,7 @@ cache:
   - C:\ProgramData\chocolatey\bin -> appveyor.yml
   - C:\ProgramData\chocolatey\lib -> appveyor.yml
 install:
-  - choco install doxygen.portable
+  - choco install doxygen.install
 # Enable if tests are added
 #  - choco install codecov
 before_build:
