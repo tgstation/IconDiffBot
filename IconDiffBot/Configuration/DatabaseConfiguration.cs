@@ -4,7 +4,7 @@
 	/// Database configuration settings
 	/// </summary>
 #pragma warning disable CA1812
-	sealed class DatabaseConfiguration
+	public sealed class DatabaseConfiguration
 #pragma warning restore CA1812
 	{
 		/// <summary>
@@ -16,6 +16,11 @@
 		/// <see langword="true"/> if <see cref="ConnectionString"/> is for MySQL, <see langword="false"/> if it's for SQL Server
 		/// </summary>
 		public bool IsMySQL { get; set; }
+
+		/// <summary>
+		/// Enables or disables DB logging
+		/// </summary>
+		public bool EnableLogging { get; set; }
 
 		/// <summary>
 		/// The database connection string

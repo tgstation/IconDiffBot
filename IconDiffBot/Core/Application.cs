@@ -9,6 +9,7 @@ using Microsoft.AspNetCore.Hosting;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Options;
 using System;
 using System.Collections.Generic;
 using System.Globalization;
@@ -80,7 +81,8 @@ namespace IconDiffBot.Core
 		/// <param name="loggerFactory">The <see cref="ILoggerFactory"/> to configure</param>
 		/// <param name="databaseContext">The <see cref="IDatabaseContext"/> to configure</param>
 		/// <param name="applicationLifetime">The <see cref="IApplicationLifetime"/> to use <see cref="System.Threading.CancellationToken"/>s from</param>
-		public void Configure(IApplicationBuilder applicationBuilder, IHostingEnvironment hostingEnvironment, ILoggerFactory loggerFactory, IApplicationLifetime applicationLifetime, IDatabaseContext databaseContext)
+		/// <param name="databaseConfigurationOptions">The <see cref="IOptions{TOptions}"/> for the <see cref="DatabaseConfiguration"/>.</param>
+		public void Configure(IApplicationBuilder applicationBuilder, IHostingEnvironment hostingEnvironment, ILoggerFactory loggerFactory, IApplicationLifetime applicationLifetime, IDatabaseContext databaseContext, IOptions<DatabaseConfiguration> databaseConfigurationOptions)
 		{
 			if (applicationBuilder == null)
 				throw new ArgumentNullException(nameof(applicationBuilder));
@@ -95,7 +97,8 @@ namespace IconDiffBot.Core
 			
 			databaseContext.Initialize(applicationLifetime.ApplicationStopping).GetAwaiter().GetResult();
 
-			loggerFactory.AddEntityFramework<DatabaseContext>(applicationBuilder.ApplicationServices);
+			if (databaseConfigurationOptions.Value.EnableLogging)
+				loggerFactory.AddEntityFramework<DatabaseContext>(applicationBuilder.ApplicationServices);
 
 			if (hostingEnvironment.IsDevelopment())
 				applicationBuilder.UseDeveloperExceptionPage();
