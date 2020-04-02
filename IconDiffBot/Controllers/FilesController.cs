@@ -84,7 +84,11 @@ namespace IconDiffBot.Controllers
 			if (!before && beforeOrAfter != "AFTER")
 				return BadRequest();
 
-			var diff = await databaseContext.IconDiffs.Where(x => x.RepositoryId == repositoryId && x.CheckRunId == checkRunId && x.FileId == fileId).Select(x => before ? x.Before : x.After).Select(x => x.Data).FirstOrDefaultAsync(cancellationToken).ConfigureAwait(false);
+			var diff = await databaseContext
+				.IconDiffs
+				.Where(x => x.RepositoryId == repositoryId && x.CheckRunId == checkRunId && x.FileId == fileId && (before ? x.Before != null : x.After != null))
+				.Select(x => before ? x.Before : x.After)
+				.Select(x => x.Data).FirstOrDefaultAsync(cancellationToken).ConfigureAwait(false);
 
 			if (diff == null)
 				return NotFound();
