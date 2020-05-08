@@ -7,6 +7,7 @@ using System.Threading;
 using System.Threading.Tasks;
 using ZNetCS.AspNetCore.Logging.EntityFrameworkCore;
 using Microsoft.AspNetCore.Hosting;
+using Microsoft.Extensions.Hosting;
 
 namespace IconDiffBot.Models
 {
@@ -39,9 +40,9 @@ namespace IconDiffBot.Models
 		/// </summary>
 		readonly ILoggerFactory loggerFactory;
 		/// <summary>
-		/// The <see cref="IHostingEnvironment"/> for the <see cref="DatabaseContext"/>
+		/// The <see cref="IWebHostEnvironment"/> for the <see cref="DatabaseContext"/>
 		/// </summary>
-		readonly IHostingEnvironment hostingEnvironment;
+		readonly IWebHostEnvironment hostingEnvironment;
 
 		/// <summary>
 		/// Construct a <see cref="DatabaseContext"/>
@@ -50,7 +51,7 @@ namespace IconDiffBot.Models
 		/// <param name="databaseConfigurationOptions">The <see cref="IOptions{TOptions}"/> containing the value of <see cref="databaseConfiguration"/></param>
 		/// <param name="loggerFactory">The value of <see cref="loggerFactory"/></param>
 		/// <param name="hostingEnvironment">The value of <see cref="hostingEnvironment"/></param>
-		public DatabaseContext(DbContextOptions<DatabaseContext> options, IOptions<DatabaseConfiguration> databaseConfigurationOptions, ILoggerFactory loggerFactory, IHostingEnvironment hostingEnvironment) : base(options)
+		public DatabaseContext(DbContextOptions<DatabaseContext> options, IOptions<DatabaseConfiguration> databaseConfigurationOptions, ILoggerFactory loggerFactory, IWebHostEnvironment hostingEnvironment) : base(options)
 		{
 			databaseConfiguration = databaseConfigurationOptions?.Value ?? throw new ArgumentNullException(nameof(databaseConfigurationOptions));
 			this.loggerFactory = loggerFactory ?? throw new ArgumentNullException(nameof(loggerFactory));
