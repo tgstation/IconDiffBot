@@ -9,7 +9,7 @@ environment:
   repo_token:
     secure: kwXtwg31BGntEG3HFOLvEbkzLB0aOyszUpvfaIXAgRpe5kVcr5IHl26pzyHEMY7/
 clone_depth: 1
-image: Visual Studio 2017
+image: Visual Studio 2019
 configuration: 
   - Debug
   - Release
