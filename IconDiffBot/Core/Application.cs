@@ -85,7 +85,7 @@ namespace IconDiffBot.Core
 		/// <param name="hostingEnvironment">The <see cref="IWebHostEnvironment"/> of the <see cref="Application"/></param>
 		/// <param name="loggerFactory">The <see cref="ILoggerFactory"/> to configure</param>
 		/// <param name="databaseContext">The <see cref="IDatabaseContext"/> to configure</param>
-		/// <param name="applicationLifetime">The <see cref="IApplicationLifetime"/> to use <see cref="System.Threading.CancellationToken"/>s from</param>
+		/// <param name="applicationLifetime">The <see cref="IHostApplicationLifetime"/> to use <see cref="System.Threading.CancellationToken"/>s from</param>
 		/// <param name="databaseConfigurationOptions">The <see cref="IOptions{TOptions}"/> for the <see cref="DatabaseConfiguration"/>.</param>
 		public void Configure(IApplicationBuilder applicationBuilder, IWebHostEnvironment hostingEnvironment, ILoggerFactory loggerFactory, IHostApplicationLifetime applicationLifetime, IDatabaseContext databaseContext, IOptions<DatabaseConfiguration> databaseConfigurationOptions)
 		{
