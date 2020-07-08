@@ -6,8 +6,10 @@ using IconDiffBot.Configuration;
 using IconDiffBot.Models;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Hosting;
+using Microsoft.AspNetCore.Routing.Matching;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 using System;
@@ -57,12 +59,15 @@ namespace IconDiffBot.Core
 					builder.UseSqlServerStorage(dbConfig.ConnectionString, new SqlServerStorageOptions { PrepareSchemaIfNecessary = true });
 			});
 
+			services.AddHangfireServer();
+
 			services.Configure<IISOptions>((options) => options.ForwardClientCertificate = false);
-			services.AddMvc();
 			services.AddOptions();
 			services.AddLocalization();
+			services.AddControllersWithViews();
+			services.AddRazorPages();
 
-			services.AddDbContext<DatabaseContext>();
+			services.AddDbContext<DatabaseContext>(ServiceLifetime.Transient);
 			services.AddScoped<IDatabaseContext>(x => x.GetRequiredService<DatabaseContext>());
 			services.AddScoped<IGitHubClientFactory, GitHubClientFactory>();
 			services.AddScoped<IGitHubManager, GitHubManager>();
@@ -77,12 +82,12 @@ namespace IconDiffBot.Core
 		/// Configure the <see cref="Application"/>
 		/// </summary>
 		/// <param name="applicationBuilder">The <see cref="IApplicationBuilder"/> to configure</param>
-		/// <param name="hostingEnvironment">The <see cref="IHostingEnvironment"/> of the <see cref="Application"/></param>
+		/// <param name="hostingEnvironment">The <see cref="IWebHostEnvironment"/> of the <see cref="Application"/></param>
 		/// <param name="loggerFactory">The <see cref="ILoggerFactory"/> to configure</param>
 		/// <param name="databaseContext">The <see cref="IDatabaseContext"/> to configure</param>
-		/// <param name="applicationLifetime">The <see cref="IApplicationLifetime"/> to use <see cref="System.Threading.CancellationToken"/>s from</param>
+		/// <param name="applicationLifetime">The <see cref="IHostApplicationLifetime"/> to use <see cref="System.Threading.CancellationToken"/>s from</param>
 		/// <param name="databaseConfigurationOptions">The <see cref="IOptions{TOptions}"/> for the <see cref="DatabaseConfiguration"/>.</param>
-		public void Configure(IApplicationBuilder applicationBuilder, IHostingEnvironment hostingEnvironment, ILoggerFactory loggerFactory, IApplicationLifetime applicationLifetime, IDatabaseContext databaseContext, IOptions<DatabaseConfiguration> databaseConfigurationOptions)
+		public void Configure(IApplicationBuilder applicationBuilder, IWebHostEnvironment hostingEnvironment, ILoggerFactory loggerFactory, IHostApplicationLifetime applicationLifetime, IDatabaseContext databaseContext, IOptions<DatabaseConfiguration> databaseConfigurationOptions)
 		{
 			if (applicationBuilder == null)
 				throw new ArgumentNullException(nameof(applicationBuilder));
@@ -126,7 +131,10 @@ namespace IconDiffBot.Core
 					Authorization = new List<IDashboardAuthorizationFilter> { }
 				});
 
-			applicationBuilder.UseMvc();
+			applicationBuilder.UseRouting();
+			applicationBuilder.UseEndpoints(endpoints => {
+				endpoints.MapControllers();
+			});
 		}
     }
 }
