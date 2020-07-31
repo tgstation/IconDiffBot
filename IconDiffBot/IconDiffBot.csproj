@@ -30,9 +30,9 @@
 
   <ItemGroup>
     <PackageReference Include="GitHubJwt" Version="0.0.4" />
-    <PackageReference Include="HangFire" Version="1.7.11" />
-    <PackageReference Include="Hangfire.MySqlStorage" Version="2.0.3" />
-    <PackageReference Include="Magick.NET-Q8-AnyCPU" Version="7.21.0" />
+    <PackageReference Include="HangFire" Version="1.7.12" />
+    <PackageReference Include="Hangfire.MySqlStorage" Version="2.0.2" />
+    <PackageReference Include="Magick.NET-Q8-AnyCPU" Version="7.21.1" />
     <PackageReference Include="MetadataExtractor" Version="2.4.3" />
     <PackageReference Include="Microsoft.CodeAnalysis.FxCopAnalyzers" Version="2.6.3">
       <PrivateAssets>all</PrivateAssets>
@@ -41,8 +41,8 @@
     <PackageReference Include="Microsoft.EntityFrameworkCore" Version="3.1.6" />
     <PackageReference Include="Microsoft.EntityFrameworkCore.SqlServer" Version="3.1.6" />
     <PackageReference Include="Octokit" Version="0.48.0" />
-    <PackageReference Include="Pomelo.EntityFrameworkCore.MySql" Version="2.1.4" />
-    <PackageReference Include="System.Drawing.Common" Version="5.0.0-preview.7.20364.11" />
+    <PackageReference Include="Pomelo.EntityFrameworkCore.MySql" Version="3.1.2" />
+    <PackageReference Include="System.Drawing.Common" Version="4.7.0" />
     <PackageReference Include="ZNetCS.AspNetCore.Logging.EntityFrameworkCore" Version="2.1.1" />
   </ItemGroup>
 
