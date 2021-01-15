@@ -6,6 +6,7 @@ using IconDiffBot.Configuration;
 using IconDiffBot.Models;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Hosting;
+using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Routing.Matching;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
@@ -125,15 +126,18 @@ namespace IconDiffBot.Core
 			
 			applicationBuilder.UseHangfireServer();
 
-			if (hostingEnvironment.IsDevelopment())
-				applicationBuilder.UseHangfireDashboard("/Hangfire", new DashboardOptions
-				{
-					Authorization = new List<IDashboardAuthorizationFilter> { }
-				});
+			applicationBuilder.UseHangfireDashboard("/dashboard", new DashboardOptions
+			{
+				IsReadOnlyFunc = (DashboardContext context) => true
+			});
 
 			applicationBuilder.UseRouting();
 			applicationBuilder.UseEndpoints(endpoints => {
 				endpoints.MapControllers();
+				endpoints.MapGet("/", async context =>
+				{
+					await context.Response.WriteAsync("Welcome To IconDiffBot!");
+				});
 			});
 		}
     }
