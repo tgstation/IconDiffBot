@@ -124,17 +124,6 @@ namespace IconDiffBot.Core
 				if(allChangedFilesTask == null || allChangedFilesTask.IsFaulted)
 					allChangedFilesTask = gitHubManager.GetPullRequestChangedFiles(pullRequest, installationId, cancellationToken);
 
-				if (generalConfiguration.BlacklistedRepos.Contains(repositoryId)) {
-					logger.LogWarning("Pull request is from a blacklisted repo. Aborting.");
-					await gitHubManager.UpdateCheckRun(repositoryId, installationId, checkRunId.Value, new CheckRunUpdate {
-						CompletedAt = DateTimeOffset.Now,
-						Status = CheckStatus.Completed,
-						Conclusion = CheckConclusion.Neutral,
-						Output = new NewCheckRunOutput(stringLocalizer["Blacklisted From Service"], stringLocalizer["This repository is blacklisted from using IconDiffBot. Please contact support in coderbus."])
-					}, cancellationToken).ConfigureAwait(false);
-					return;
-				}
-
 				if (!checkRunId.HasValue)
 				{
 					var ncr = new NewCheckRun(String.Format(CultureInfo.InvariantCulture, "Diffs - Pull Request #{0}", pullRequest.Number), pullRequest.Head.Sha)
@@ -144,6 +133,28 @@ namespace IconDiffBot.Core
 					};
 					
 					checkRunId = await gitHubManager.CreateCheckRun(repositoryId, installationId, ncr, cancellationToken).ConfigureAwait(false);
+				}
+
+				if (pullRequest.Title.Contains("[IDB IGNORE]", StringComparison.InvariantCultureIgnoreCase)) {
+					logger.LogWarning("Pull request has [IDB IGNORE] in title. Aborting.");
+					await gitHubManager.UpdateCheckRun(repositoryId, installationId, checkRunId.Value, new CheckRunUpdate {
+						CompletedAt = DateTimeOffset.Now,
+						Status = CheckStatus.Completed,
+						Conclusion = CheckConclusion.Neutral,
+						Output = new NewCheckRunOutput(stringLocalizer["PR Ignored"], stringLocalizer["This PR has `[IDB IGNORE]` in the title. Aborting."])
+					}, cancellationToken).ConfigureAwait(false);
+					return;
+				}
+
+				if (generalConfiguration.BlacklistedRepos.Contains(repositoryId)) {
+					logger.LogWarning("Pull request is from a blacklisted repo. Aborting.");
+					await gitHubManager.UpdateCheckRun(repositoryId, installationId, checkRunId.Value, new CheckRunUpdate {
+						CompletedAt = DateTimeOffset.Now,
+						Status = CheckStatus.Completed,
+						Conclusion = CheckConclusion.Neutral,
+						Output = new NewCheckRunOutput(stringLocalizer["Blacklisted From Service"], stringLocalizer["This repository is blacklisted from using IconDiffBot. Please contact support in coderbus."])
+					}, cancellationToken).ConfigureAwait(false);
+					return;
 				}
 
 				var allChangedFiles = await allChangedFilesTask.ConfigureAwait(false);
